@@ -1,0 +1,23 @@
+# backups
+*.bak*
+*.bak9*
+
+# node / python
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+
+# workspace memory (daily logs)
+.workbuddy/memory/
+
+# workbuddy system
+.workbuddy/skills/
+
+# temp files
+/tmp/
+/dist/server.log
+
+# os files
+.DS_Store
+Thumbs.db

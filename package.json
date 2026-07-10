@@ -1,0 +1,13 @@
+{
+  "name": "ai-scheduling-board",
+  "version": "1.0.0",
+  "description": "AI 排期工具 - V9j",
+  "private": true,
+  "scripts": {
+    "precheck": "node scripts/pre-release-check.js",
+    "pre-release-check": "node scripts/pre-release-check.js",
+    "install-hook": "cp scripts/pre-commit-hook .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && echo '✅ pre-commit hook installed'"
+  },
+  "keywords": ["scheduling", "gantt", "ai"],
+  "license": "UNLICENSED"
+}

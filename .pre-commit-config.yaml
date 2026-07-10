@@ -1,0 +1,27 @@
+# ============================================================
+# GitGuardian pre-commit hook 配置（可选，推荐安装）
+# ------------------------------------------------------------
+# 安装方法：
+#   1. 安装 ggshield CLI:
+#      pip install ggshield
+#      或 brew install gitguardian/tap/ggshield
+#
+#   2. 安装 pre-commit:
+#      pip install pre-commit
+#      pre-commit install
+#
+#   3. 认证:
+#      ggshield auth login
+#      (从 https://dashboard.gitguardian.com/workspace/api-keys 获取)
+#
+# 功能：每次 git commit 前自动扫描暂存区，发现密钥则阻止提交
+# ============================================================
+
+repos:
+  - repo: https://github.com/gitguardian/ggshield
+    rev: v1.32.0
+    hooks:
+      - id: ggshield
+        language_version: python3
+        # 只扫描暂存的文件，不影响工作区
+        args: ['secret', 'scan', 'precommit']

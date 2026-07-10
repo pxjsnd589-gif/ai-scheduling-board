@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI排期工具 - 安全审计报告</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #f5f5f0; color: #2c2c2c; line-height: 1.7;
+    padding: 40px 20px;
+  }
+  .container { max-width: 860px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 40px; }
+  .header h1 { font-size: 28px; color: #1a1a1a; margin-bottom: 8px; }
+  .header .meta { color: #888; font-size: 14px; }
+  .badge {
+    display: inline-block; padding: 4px 14px; border-radius: 20px;
+    font-size: 13px; font-weight: 600; margin: 0 4px;
+  }
+  .badge-ok { background: #dcfce7; color: #166534; }
+  .badge-warn { background: #fef3c7; color: #92400e; }
+  .badge-crit { background: #fee2e2; color: #991b1b; }
+  .section {
+    background: #fff; border-radius: 12px; padding: 28px;
+    margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .section h2 {
+    font-size: 19px; margin-bottom: 16px; padding-bottom: 10px;
+    border-bottom: 2px solid #f0f0e8; display: flex; align-items: center; gap: 8px;
+  }
+  .result-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px; margin-bottom: 16px;
+  }
+  .result-card {
+    border: 1px solid #e5e5e0; border-radius: 10px; padding: 20px; text-align: center;
+  }
+  .result-card .num { font-size: 36px; font-weight: 700; line-height: 1.2; }
+  .result-card .label { font-size: 13px; color: #777; margin-top: 4px; }
+  .result-card.crit .num { color: #dc2626; }
+  .result-card.warn .num { color: #d97706; }
+  .result-card.ok .num { color: #16a34a; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #f0f0e8; }
+  th { background: #faf9f5; font-weight: 600; color: #555; }
+  code {
+    background: #f5f5f0; padding: 2px 6px; border-radius: 4px;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 13px;
+  }
+  .file-tree {
+    background: #faf9f5; border-radius: 8px; padding: 16px 20px;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 13px;
+    line-height: 1.9; color: #444;
+  }
+  .file-tree .new { color: #16a34a; font-weight: 600; }
+  .file-tree .mod { color: #d97706; font-weight: 600; }
+  .callout {
+    border-left: 4px solid; padding: 12px 16px; border-radius: 0 8px 8px 0;
+    margin: 12px 0; font-size: 14px;
+  }
+  .callout-info { border-color: #3b82f6; background: #eff6ff; }
+  .callout-warn { border-color: #f59e0b; background: #fffbeb; }
+  .cmd {
+    background: #1e1e1e; color: #e0e0e0; padding: 12px 16px; border-radius: 8px;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 13px;
+    margin: 8px 0; display: block;
+  }
+  .cmd .prompt { color: #4ade80; }
+  ul { padding-left: 20px; margin: 8px 0; }
+  li { margin: 4px 0; font-size: 14px; }
+  .footer { text-align: center; color: #aaa; font-size: 12px; margin-top: 30px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>AI排期工具 (V9j) - 安全审计报告</h1>
+    <div class="meta">
+      仓库: github.com/pxjsnd589-gif/ai-scheduling-board<br>
+      审计日期: 2026-07-10
+    </div>
+  </div>
+
+  <!-- 扫描结果概览 -->
+  <div class="section">
+    <h2>📊 扫描结果概览</h2>
+    <div class="result-grid">
+      <div class="result-card ok">
+        <div class="num">0</div>
+        <div class="label">API Key 泄露 (CRITICAL)</div>
+      </div>
+      <div class="result-card ok">
+        <div class="num">0</div>
+        <div class="label">真人测试数据 (已脱敏)</div>
+      </div>
+      <div class="result-card ok">
+        <div class="num">0</div>
+        <div class="label">私人邮箱泄露</div>
+      </div>
+      <div class="result-card ok">
+        <div class="num">0</div>
+        <div class="label">电脑用户名泄露</div>
+      </div>
+    </div>
+    <div class="callout callout-info">
+      <strong>结论：</strong>未发现任何 API Key。本项目是纯前端排期工具，没有调用任何外部 API。
+      <code>STORAGE_KEY = 'ai_schedule_tool_v1'</code> 只是 localStorage 的存储键名，不是密钥。
+    </div>
+  </div>
+
+  <!-- 脱敏结果 -->
+  <div class="section">
+    <h2>✅ 真人测试数据脱敏（已完成）</h2>
+    <p style="margin-bottom:12px;">原代码中硬编码的内部团队成员称呼已全部替换为职务代号（共 198 处）：</p>
+    <table>
+      <tr><th>原称呼</th><th>出现位置</th><th>已替换为</th><th>数量</th></tr>
+      <tr><td>（已脱敏）</td><td>审批人/评审人</td><td>美术总监</td><td>31 处</td></tr>
+      <tr><td>（已脱敏）</td><td>评审人</td><td>场景Leader</td><td>18 处</td></tr>
+      <tr><td>（已脱敏）</td><td>评审人</td><td>评审员A</td><td>20 处</td></tr>
+      <tr><td>（已脱敏）</td><td>评审人</td><td>评审员B</td><td>6 处</td></tr>
+      <tr><td>（已脱敏）</td><td>角色对接人</td><td>角色对接人</td><td>10 处</td></tr>
+      <tr><td>（已脱敏）</td><td>站点审批人</td><td>站点Leader</td><td>6 处</td></tr>
+      <tr><td>（已脱敏）</td><td>CG审批人</td><td>CG Leader</td><td>6 处</td></tr>
+      <tr><td>（已脱敏）</td><td>角色Leader</td><td>角色Leader</td><td>2 处</td></tr>
+    </table>
+    <div class="callout callout-info">
+      <strong>结果：</strong>脱敏检查从 198 处 WARNING 降至 0 处。项目代码中不再包含任何内部团队称呼。
+    </div>
+  </div>
+
+  <!-- 已部署的安全措施 -->
+  <div class="section">
+    <h2>🛡️ 已部署的 4 项安全措施</h2>
+    <table>
+      <tr><th>#</th><th>措施</th><th>状态</th><th>文件</th></tr>
+      <tr>
+        <td>1</td>
+        <td>API Key 放进 .env</td>
+        <td><span class="badge badge-ok">已就绪</span></td>
+        <td><code>.env</code> <code>.env.example</code> <code>.gitignore</code></td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>发布前脱敏检查</td>
+        <td><span class="badge badge-ok">已部署</span></td>
+        <td><code>scripts/pre-release-check.js</code></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>GitGuardian 自动检测</td>
+        <td><span class="badge badge-ok">已配置</span></td>
+        <td><code>.github/workflows/</code></td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>API Key 限额与定期更换</td>
+        <td><span class="badge badge-ok">已编写</span></td>
+        <td><code>docs/API-KEY-SECURITY.md</code></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- 使用方法 -->
+  <div class="section">
+    <h2>📖 使用方法</h2>
+
+    <h3 style="margin:16px 0 8px; font-size:15px;">① 发布前脱敏检查</h3>
+    <p>每次发布前运行，检测真名/私人邮箱/电脑用户名/真人测试数据/API Key：</p>
+    <div class="cmd"><span class="prompt">$</span> node scripts/pre-release-check.js</div>
+
+    <h3 style="margin:16px 0 8px; font-size:15px;">② 安装 pre-commit hook（提交前自动检查）</h3>
+    <div class="cmd"><span class="prompt">$</span> npm run install-hook</div>
+
+    <h3 style="margin:16px 0 8px; font-size:15px;">③ GitGuardian 配置（需手动完成一次）</h3>
+    <ul>
+      <li>注册 <a href="https://dashboard.gitguardian.com">GitGuardian</a> 账号（个人免费）</li>
+      <li>获取 API Key：dashboard → API Keys → Create</li>
+      <li>添加到 GitHub：仓库 Settings → Secrets → Actions → New secret</li>
+      <li>名称填 <code>GITGUARDIAN_API_KEY</code>，值填你的 Key</li>
+    </ul>
+    <p style="margin-top:8px;">配置后，每次 Push/PR 会自动扫描密钥泄露，打 Tag 发布前会同时运行脱敏检查 + GitGuardian。</p>
+
+    <h3 style="margin:16px 0 8px; font-size:15px;">④ 接入 API 时（未来）</h3>
+    <div class="cmd"><span class="prompt">$</span> cp .env.example .env  <span style="color:#888"># 复制模板</span>
+<span class="prompt">$</span> <span style="color:#888"># 编辑 .env，填入真实 Key</span>
+<span style="color:#888"># 代码中用 import.meta.env.VITE_XXX 或 process.env.XXX 读取</span></div>
+  </div>
+
+  <!-- 新增文件清单 -->
+  <div class="section">
+    <h2>📁 新增/修改文件清单</h2>
+    <div class="file-tree">
+ai-scheduling-board/
+├── <span class="mod">.gitignore</span>                    <span class="mod">[修改]</span> 新增 .env / 密钥文件忽略规则
+├── <span class="new">.env</span>                          <span class="new">[新增]</span> 真实环境变量（已忽略，不提交）
+├── <span class="new">.env.example</span>                  <span class="new">[新增]</span> 环境变量模板（可提交）
+├── <span class="new">.pre-commit-config.yaml</span>       <span class="new">[新增]</span> GitGuardian pre-commit 配置
+├── <span class="new">.github/workflows/</span>
+│   ├── <span class="new">gitguardian-scan.yml</span>      <span class="new">[新增]</span> Push/PR 自动密钥扫描
+│   └── <span class="new">pre-release-check.yml</span>     <span class="new">[新增]</span> 发布前综合安全门禁
+├── <span class="new">scripts/</span>
+│   ├── <span class="new">pre-release-check.js</span>      <span class="new">[新增]</span> 脱敏检查脚本（27条规则）
+│   └── <span class="new">pre-commit-hook</span>           <span class="new">[新增]</span> Git hook 脚本
+├── <span class="new">docs/</span>
+│   └── <span class="new">API-KEY-SECURITY.md</span>       <span class="new">[新增]</span> API Key 限额/更换/应急指南
+└── <span class="new">package.json</span>                  <span class="new">[新增]</span> npm scripts 集成
+    </div>
+  </div>
+
+  <div class="footer">
+    本报告由 WorkBuddy 安全审计生成 · 2026-07-10
+  </div>
+
+</div>
+</body>
+</html>

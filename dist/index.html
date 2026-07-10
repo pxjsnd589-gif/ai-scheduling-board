@@ -1691,15 +1691,15 @@ const DEFAULT_CONFIG = {
   charKeyHours: { 1: 1.5, 2: 0.5, 3: 0.6, 4: 1.2, 5: 1, 6: 2.4, 7: 1, 8: 0.5 },
   charNormalHours: { 1: 1.5, 2: 0.5, 3: 0.6, 4: 1.2, 5: 1, 6: 2.4, 7: 1, 8: 0.5 },
   pipelines: [
-    { id: 'hero', name: '英雄线', score: 5, importance: 3, approver: '东哥' },
-    { id: 'arena', name: '战场玩法线', score: 3, importance: 1, approver: '庄哥' },
+    { id: 'hero', name: '英雄线', score: 5, importance: 3, approver: '美术总监' },
+    { id: 'arena', name: '战场玩法线', score: 3, importance: 1, approver: '场景Leader' },
     { id: 'system', name: '系统线', score: 3, importance: 3, approver: '各位Leader' },
-    { id: 'bible', name: 'Bible概念', score: 1, importance: 5, approver: '东哥' },
-    { id: 'region', name: '区域概念', score: 2, importance: 5, approver: '东哥' },
-    { id: 'narrative', name: '叙事', score: 2, importance: 5, approver: '东哥' },
-    { id: 'station', name: '站点', score: 1, importance: 1, approver: 'Aiko' },
-    { id: 'cg', name: 'CG', score: 4, importance: 2, approver: 'Kuki' },
-    { id: 'pv', name: 'PV', score: 3, importance: 2, approver: '飞飞' }
+    { id: 'bible', name: 'Bible概念', score: 1, importance: 5, approver: '美术总监' },
+    { id: 'region', name: '区域概念', score: 2, importance: 5, approver: '美术总监' },
+    { id: 'narrative', name: '叙事', score: 2, importance: 5, approver: '美术总监' },
+    { id: 'station', name: '站点', score: 1, importance: 1, approver: '站点Leader' },
+    { id: 'cg', name: 'CG', score: 4, importance: 2, approver: 'CG Leader' },
+    { id: 'pv', name: 'PV', score: 3, importance: 2, approver: '角色对接人' }
   ],
   // 两套阈值（步骤6 用优先级总分；步骤7 用内部重要程度）
   // 旧字段 thresholds 保留：导入旧 state 时会迁移到下方两套
@@ -1726,15 +1726,15 @@ const DEFAULT_CONFIG = {
       name: '剧情场景',
       nodes: [
         { type: 'make',   name: '场景文学设定',                              days: 7, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '文学评审（东哥/妹昱）',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱' },
+        { type: 'review', name: '文学评审（美术总监/评审员A）',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A' },
         { type: 'make',   name: '场景概念方向草图',                          days: 5, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '草图评审1（庄哥/林老板）',                  days: 1, ownerRule: 'reviewer_p1', reviewerRule: '庄哥（场景Leader）/ 林老板' },
+        { type: 'review', name: '草图评审1（场景Leader/评审员B）',                  days: 1, ownerRule: 'reviewer_p1', reviewerRule: '场景Leader/ 评审员B' },
         { type: 'make',   name: '草图修改 + 周会同步',                       days: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '周会同步',             days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱 / 庄哥 / 林老板' },
+        { type: 'review', name: '周会同步',             days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A / 场景Leader / 评审员B' },
         { type: 'make',   name: '场景概念图',                                days: 8, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '概念图评审2（庄哥/林老板）',                days: 1, ownerRule: 'reviewer_p1', reviewerRule: '庄哥（场景Leader）/ 林老板' },
+        { type: 'review', name: '概念图评审2（场景Leader/评审员B）',                days: 1, ownerRule: 'reviewer_p1', reviewerRule: '场景Leader/ 评审员B' },
         { type: 'make',   name: '概念图修改 + 周会同步',                     days: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '周会同步',             days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱 / 庄哥 / 林老板' },
+        { type: 'review', name: '周会同步',             days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A / 场景Leader / 评审员B' },
         { type: 'make',   name: '物件拆分与设计细化（发包）',                days: 5, ownerRule: 'worker',     reviewerRule: '' }
       ]
     },
@@ -1742,15 +1742,15 @@ const DEFAULT_CONFIG = {
       name: '世界观场景',
       nodes: [
         { type: 'make',   name: '场景文学设定',                              days: 7, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '文学评审（东哥/妹昱）',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱' },
+        { type: 'review', name: '文学评审（美术总监/评审员A）',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A' },
         { type: 'make',   name: '场景概念方向草图',                          days: 5, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '草图评审（庄哥）',                          days: 1, ownerRule: 'reviewer_p1', reviewerRule: '庄哥（场景Leader）' },
+        { type: 'review', name: '草图评审（场景Leader）',                          days: 1, ownerRule: 'reviewer_p1', reviewerRule: '场景Leader' },
         { type: 'make',   name: '草图修改 + 周会同步',                       days: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '周会同步',                    days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱 / 庄哥' },
+        { type: 'review', name: '周会同步',                    days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A / 场景Leader' },
         { type: 'make',   name: '场景概念图',                                days: 8, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '概念图评审（庄哥）',                        days: 1, ownerRule: 'reviewer_p1', reviewerRule: '庄哥（场景Leader）' },
+        { type: 'review', name: '概念图评审（场景Leader）',                        days: 1, ownerRule: 'reviewer_p1', reviewerRule: '场景Leader' },
         { type: 'make',   name: '概念图修改 + 周会同步',                     days: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '周会同步',                    days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱 / 庄哥' },
+        { type: 'review', name: '周会同步',                    days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A / 场景Leader' },
         { type: 'archive',name: 'Arthub 归档（应用方取用）',                 days: 1, ownerRule: 'worker',     reviewerRule: '' }
       ]
     },
@@ -1758,14 +1758,14 @@ const DEFAULT_CONFIG = {
       name: '重点 NPC',
       nodes: [
         { type: 'make',   name: '重点 NPC 角色卡',                           days: 8, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '文学评审（东哥/妹昱）',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱' },
+        { type: 'review', name: '文学评审（美术总监/评审员A）',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A' },
         { type: 'make',   name: '印象图',                                    days: 3, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '飞飞评估',                                  days: 1, ownerRule: 'reviewer_p2', reviewerRule: '飞飞（角色对接人）' },
+        { type: 'review', name: '角色对接人评估',                                  days: 1, ownerRule: 'reviewer_p2', reviewerRule: '角色对接人' },
         { type: 'make',   name: '印象图修改 + 周会同步',                     days: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '周会同步',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱' },
+        { type: 'review', name: '周会同步',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A' },
         { type: 'make',   name: '设定图',                                    days: 5, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'make',   name: '三视图',                                    days: 10,ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '终评（东哥/妹昱）',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱' },
+        { type: 'review', name: '终评（美术总监/评审员A）',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A' },
         { type: 'archive',name: 'Arthub 归档',                               days: 1, ownerRule: 'worker',     reviewerRule: '' }
       ]
     },
@@ -1773,11 +1773,11 @@ const DEFAULT_CONFIG = {
       name: 'NPC（普通）',
       nodes: [
         { type: 'make',   name: 'NPC 角色卡',                                days: 3, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '文学评审（妹昱/文嘉）',                     days: 1, ownerRule: 'reviewer_p1', reviewerRule: '妹昱 / 文嘉（角色Leader）' },
+        { type: 'review', name: '文学评审（评审员A/角色Leader）',                     days: 1, ownerRule: 'reviewer_p1', reviewerRule: '评审员A / 角色Leader' },
         { type: 'make',   name: '印象图',                                    days: 3, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '飞飞评估',                                  days: 1, ownerRule: 'reviewer_p2', reviewerRule: '飞飞（角色对接人）' },
+        { type: 'review', name: '角色对接人评估',                                  days: 1, ownerRule: 'reviewer_p2', reviewerRule: '角色对接人' },
         { type: 'make',   name: '印象图修改 + 周会同步',                     days: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '周会同步',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱' },
+        { type: 'review', name: '周会同步',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A' },
         { type: 'archive',name: 'Arthub 归档',                               days: 1, ownerRule: 'worker',     reviewerRule: '' }
       ]
     },
@@ -1785,7 +1785,7 @@ const DEFAULT_CONFIG = {
       name: '简单补充设定',
       nodes: [
         { type: 'make',   name: '场景文学设定',                              days: 5, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '评审（东哥/妹昱）',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱' },
+        { type: 'review', name: '评审（美术总监/评审员A）',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A' },
         { type: 'make',   name: '修改',                                      days: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'archive',name: '文学归档',                                  days: 1, ownerRule: 'worker',     reviewerRule: '' }
       ]
@@ -1794,7 +1794,7 @@ const DEFAULT_CONFIG = {
       name: '上报 PM 单独拉起',
       nodes: [
         { type: 'make',   name: '场景文学设定',                              days: 5, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '评审（东哥/妹昱）',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '东哥（总监）/ 妹昱' },
+        { type: 'review', name: '评审（美术总监/评审员A）',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '美术总监/ 评审员A' },
         { type: 'make',   name: '修改',                                      days: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'archive',name: '文学归档',                                  days: 1, ownerRule: 'worker',     reviewerRule: '' }
       ]
@@ -2224,28 +2224,28 @@ function runDecisionChain(req) {
     detail: `优先级总分 ${prioScore} → ≥${pt.P0}=P0紧急, ${pt.P1}~${pt.P0-1}=P1较急, ${pt.P2}~${pt.P1-1}=P2一般, 0=无重要（建议打回）` });
 
   // 审批人映射规则：
-  //  特殊：涉及 Bible/区域/叙事 → 推东哥
+  //  特殊：涉及 Bible/区域/叙事 → 推美术总监
   //  否则按"内部重要程度"分档：
-  //    ≥13  → 东哥（总监）  不分场景/角色
-  //    6~12 → 场景:庄哥 / 角色:Kuki
-  //    1~5  → 场景:Aiko  / 角色:飞飞
+  //    ≥13  → 美术总监  不分场景/角色
+  //    6~12 → 场景:场景Leader / 角色:CG Leader
+  //    1~5  → 场景:站点Leader  / 角色:角色对接人
   let approver = '—';
   const it = config.importanceThresholds || config.thresholds;
   const needsDong = (req.pipelines || []).some(p => ['bible','region','narrative'].includes(p));
   const detailParts = [];
   const catLabel = isChar ? '角色类' : '场景类';
   if (needsDong) {
-    approver = '东哥（总监）';
-    detailParts.push('涉及 Bible/区域/叙事 → 推东哥');
+    approver = '美术总监';
+    detailParts.push('涉及 Bible/区域/叙事 → 推美术总监');
   }
   if (importanceScore >= it.P0) {
-    approver = '东哥（总监）';
+    approver = '美术总监';
     detailParts.push(`内部重要程度 ${importanceScore}（≥${it.P0}，P0）→ ${catLabel} → ${approver}`);
   } else if (importanceScore >= it.P1) {
-    approver = isChar ? 'Kuki（角色对接人）' : '庄哥（场景对接人）';
+    approver = isChar ? 'CG Leader（角色对接人）' : '场景Leader（场景对接人）';
     detailParts.push(`内部重要程度 ${importanceScore}（${it.P1}~${it.P0-1}，P1）→ ${catLabel} → ${approver}`);
   } else if (importanceScore >= it.P2) {
-    approver = isChar ? '飞飞（角色对接人）' : 'Aiko（场景对接人）';
+    approver = isChar ? '角色对接人' : '站点Leader（场景对接人）';
     detailParts.push(`内部重要程度 ${importanceScore}（${it.P2}~${it.P1-1}，P2）→ ${catLabel} → ${approver}`);
   } else {
     if (approver === '—') approver = '—（无内部重要程度，建议打回）';
@@ -2258,9 +2258,9 @@ function runDecisionChain(req) {
 
 // 把 flow 节点里的 ownerRule 解析成实际的人员 id
 // rule: 'worker'        → req.ownerId 优先；否则按人员表 round-robin（按 req.id hash）
-//       'reviewer_p0'   → P0：东哥/总监；当前阶段以 worker 执行（保存到 task.reviewer 显示）
-//       'reviewer_p1'   → P1：场景=庄哥 / 角色=Kuki；同上游
-//       'reviewer_p2'   → P2：场景=Aiko / 角色=飞飞；同上游
+//       'reviewer_p0'   → P0：美术总监/总监；当前阶段以 worker 执行（保存到 task.reviewer 显示）
+//       'reviewer_p1'   → P1：场景=场景Leader / 角色=CG Leader；同上游
+//       'reviewer_p2'   → P2：场景=站点Leader / 角色=角色对接人；同上游
 function _stableHash(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
@@ -2336,9 +2336,9 @@ function autoSchedule(req, decision, batchIdx = 0) {
     let reviewer = node.reviewerRule || '';
     if (!reviewer && node.ownerRule && node.ownerRule.startsWith('reviewer_')) {
       const isChar = req.category && req.category.startsWith('char');
-      if (node.ownerRule === 'reviewer_p0') reviewer = '东哥（总监）';
-      else if (node.ownerRule === 'reviewer_p1') reviewer = isChar ? 'Kuki（角色Leader）' : '庄哥（场景Leader）';
-      else if (node.ownerRule === 'reviewer_p2') reviewer = isChar ? '飞飞（角色对接人）' : 'Aiko（场景对接人）';
+      if (node.ownerRule === 'reviewer_p0') reviewer = '美术总监';
+      else if (node.ownerRule === 'reviewer_p1') reviewer = isChar ? 'CG Leader（角色Leader）' : '场景Leader';
+      else if (node.ownerRule === 'reviewer_p2') reviewer = isChar ? '角色对接人' : '站点Leader（场景对接人）';
     }
 
     const task = {
@@ -6170,7 +6170,7 @@ function renderSettings() {
         </div>
         <div class="text-muted text-sm" style="padding:6px 0 0 0;">
           优先级分档：≥P0=紧急, P1~P0-1=较急, P2~P1-1=一般, 0=无重要（建议打回）<br>
-          审批人分档：≥P0=东哥（总监）, P1~P0-1=庄哥/Kuki, P2~P1-1=Aiko/飞飞
+          审批人分档：≥P0=美术总监, P1~P0-1=场景Leader/CG Leader, P2~P1-1=站点Leader/角色对接人
         </div>
       </div>
     </div>
@@ -6224,7 +6224,7 @@ function renderFlowsEditor() {
   if (!wrap) return;
   const flows = (state.config && state.config.flows) || {};
   const TYPE_OPTS = [['hr','人力'],['make','制作'],['review','评审'],['archive','归档']];
-  const OWNER_OPTS = [['worker','worker'],['reviewer_p0','P0 东哥'],['reviewer_p1','P1 Leader'],['reviewer_p2','P2 对接人']];
+  const OWNER_OPTS = [['worker','worker'],['reviewer_p0','P0 美术总监'],['reviewer_p1','P1 Leader'],['reviewer_p2','P2 对接人']];
   wrap.innerHTML = Object.entries(flows).map(([fid, f]) => {
     const totalDays = (f.nodes || []).reduce((s, n) => s + (parseInt(n.days) || 0), 0);
     return `

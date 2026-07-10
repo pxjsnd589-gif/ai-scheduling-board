@@ -1,0 +1,40 @@
+# ============================================================
+# 发布前综合安全检查 - GitHub Actions
+# ------------------------------------------------------------
+# 功能：在发布（打 Tag / 创建 Release）前自动运行：
+#   1. 本地脱敏检查脚本（检测真名/邮箱/用户名/真人测试数据）
+#   2. GitGuardian 密钥检测
+# 任一检查失败则阻止发布流程。
+# ============================================================
+
+name: Pre-Release Security Check
+
+on:
+  # 推送 tag 时触发（发布流程）
+  push:
+    tags: ['v*']
+  # 手动触发
+  workflow_dispatch:
+
+jobs:
+  pre-release-check:
+    name: Pre-Release Security Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run desensitization check (脱敏检查)
+        run: node scripts/pre-release-check.js
+
+      - name: GitGuardian Secret Detection
+        uses: GitGuardian/ggshield-action@v1
+        env:
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+        with:
+          args: secret scan ci --verbose

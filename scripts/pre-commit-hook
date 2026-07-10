@@ -1,0 +1,30 @@
+#!/bin/sh
+# ============================================================
+# Git pre-commit hook - 本地脱敏检查 + 密钥检测
+# ------------------------------------------------------------
+# 安装方法：
+#   cp scripts/pre-commit-hook .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# 功能：每次 git commit 前自动运行脱敏检查脚本
+#       发现 CRITICAL 级别问题则阻止提交
+# ============================================================
+
+echo ""
+echo "🔍 Running pre-commit desensitization check..."
+
+# 运行脱敏检查脚本
+node scripts/pre-release-check.js
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+  echo ""
+  echo "❌ Commit blocked: 脱敏检查发现 CRITICAL 级别问题！"
+  echo "   请修复后重新提交，或使用 git commit --no-verify 跳过（不推荐）。"
+  echo ""
+  exit 1
+fi
+
+echo ""
+echo "✅ Pre-commit check passed."
+exit 0

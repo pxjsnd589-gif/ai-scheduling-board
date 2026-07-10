@@ -1,4 +1,21 @@
-# backups
+# ============================================================
+# 敏感信息 - 严禁提交！
+# ============================================================
+# 环境变量文件（含 API Key）
+.env
+.env.local
+.env.*.local
+.env.production
+
+# 密钥 / 证书
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials.json
+
+# 备份
 *.bak*
 *.bak9*
 
@@ -21,3 +38,8 @@ __pycache__/
 # os files
 .DS_Store
 Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

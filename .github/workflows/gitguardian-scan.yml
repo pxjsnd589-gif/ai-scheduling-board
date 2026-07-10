@@ -1,0 +1,44 @@
+# ============================================================
+# GitGuardian 自动密钥检测 - GitHub Actions
+# ------------------------------------------------------------
+# 功能：每次 Push / Pull Request 时自动扫描密钥泄露
+# 依赖：需要在 GitHub 仓库 Settings → Secrets 中添加
+#       GITGUARDIAN_API_KEY (从 https://dashboard.gitguardian.com 获取)
+#
+# 免费版：个人开发者可免费使用（Public 仓库无限制）
+# ============================================================
+
+name: GitGuardian Secret Scan
+
+on:
+  # 推送到任何分支时触发
+  push:
+    branches: ['**']
+  # Pull Request 时触发（防止密钥通过 PR 进入仓库）
+  pull_request:
+    branches: ['**']
+  # 支持手动触发
+  workflow_dispatch:
+
+jobs:
+  gitguardian-scan:
+    name: Detect Secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # 获取完整历史，以便扫描所有提交
+          fetch-depth: 0
+
+      - name: GitGuardian Secret Detection
+        uses: GitGuardian/ggshield-action@v1
+        env:
+          # 从 GitHub Secrets 读取 GitGuardian API Key
+          # 配置路径：仓库 Settings → Secrets and variables → Actions → New secret
+          # 名称：GITGUARDIAN_API_KEY
+          # 值：从 https://dashboard.gitguardian.com/workspace/api-keys 获取
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+        with:
+          # 扫描模式：对当前推送的所有新提交进行检测
+          args: secret scan ci --verbose

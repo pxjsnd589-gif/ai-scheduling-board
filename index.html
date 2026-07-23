@@ -694,7 +694,6 @@ V129云梦泽剧情场景概念刷新
           </div>
           <div class="action-bar">
             <button class="btn btn-primary" id="btnSubmit">完成</button>
-            <button class="btn btn-secondary" id="btnBatchGen" title="沿用当前表单配置，批量生成多条同类型需求（每行可改需求名/DDL）">批量生成</button>
             <button class="btn btn-secondary" id="btnClearForm">清空</button>
           </div>
         </div>
@@ -900,40 +899,6 @@ V129云梦泽剧情场景概念刷新
   </div>
 </div>
 
-<!-- 批量生成需求：模板沿用当前录入表单，逐行改 需求名 / DDL -->
-<div class="modal-backdrop hidden" id="batchGenModal">
-  <div class="modal" style="width:720px; max-width:96vw;">
-    <div class="modal-header">
-      <div class="modal-title">🧬 批量生成需求 · <span class="text-muted text-sm">模板沿用当前表单</span></div>
-      <button class="modal-close" id="batchGenClose">✕</button>
-    </div>
-    <div class="modal-body">
-      <div id="bgTemplateInfo" class="text-sm text-muted" style="margin-bottom:8px;"></div>
-      <div class="row" style="gap:8px; align-items:center; margin-bottom:8px;">
-        <span class="text-sm">数量：</span>
-        <button class="btn btn-ghost btn-sm" id="bgMinus" title="减少一行">−</button>
-        <input id="bgCount" type="number" min="1" max="99" value="2" class="input" style="width:56px; text-align:center;">
-        <button class="btn btn-ghost btn-sm" id="bgPlus" title="增加一行">+</button>
-        <span style="flex:1;"></span>
-        <button class="btn btn-ghost btn-sm" id="bgPasteToggle">📋 粘贴名称</button>
-      </div>
-      <div id="bgPasteArea" style="display:none; margin-bottom:8px;">
-        <textarea id="bgPaste" class="textarea" rows="4" placeholder="每行一个需求名&#10;支持「名称&lt;Tab&gt;日期」两列，第二列覆盖该行 DDL&#10;例：&#10;淘池&#10;杨玉环演奏服装&#10;长安世界观大纲&#9;2026-09-30"></textarea>
-        <div class="row" style="justify-content:flex-end; gap:6px; margin-top:4px;">
-          <button class="btn btn-secondary btn-sm" id="bgPasteApply">应用名称（覆盖表格）</button>
-        </div>
-      </div>
-      <div id="bgRows" style="max-height:42vh; overflow:auto;"></div>
-    </div>
-    <div class="modal-footer">
-      <div class="modal-footer-left text-muted text-sm">每行可改 需求名 / DDL，其余字段沿用模板</div>
-      <div class="modal-footer-right">
-        <button class="btn btn-ghost btn-sm" id="batchGenCancel">取消</button>
-        <button class="btn btn-primary btn-sm" id="bgGenerate">生成并预览</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <input type="file" id="fileInput" accept=".json" style="display:none;">
 <input type="file" id="importFileInputHidden" accept=".xlsx,.xls,.csv,.txt" style="display:none;">
@@ -946,7 +911,7 @@ V129云梦泽剧情场景概念刷新
 const DEFAULT_CONFIG = {
   // 配置版本号：每次改动内置 flows/holidays 结构就 +1，
   // loadState 会强制用新版覆盖旧缓存里的 flows/holidays（保留用户需求/任务）
-  _cfgVersion: 42,
+  _cfgVersion: 43,
   sceneStoryHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   sceneWorldHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   charKeyHours: { 1: 1.5, 2: 0.5, 3: 0.6, 4: 1.2, 5: 1, 6: 2.4, 7: 1, 8: 0.5 },
@@ -2398,7 +2363,6 @@ function bindInputForm() {
     clearPendingQueue();
   };
   document.getElementById('btnSubmit').onclick = submitRequirement;
-  bindBatchGen();
   document.getElementById('btnClearForm').onclick = () => {
     document.getElementById('f_name').value = '';
     document.getElementById('f_desc').value = '';
@@ -3795,8 +3759,7 @@ function bindImportFeature() {
 }
 
 
-// 从当前表单构建一个需求对象（批量生成 / 单条提交复用同一套逻辑）
-// nameOverride / ddlOverride 用于批量生成时逐行覆盖需求名与 DDL
+// 从当前表单构建需求对象
 function buildSingleReq(name, ddl) {
   const pipelines = Array.from(document.querySelectorAll('#f_pipelines input:checked')).map(c => c.value);
   const hasAssets = getSelectedAssets();
@@ -3829,112 +3792,6 @@ function submitRequirement() {
   const req = buildSingleReq(name, document.getElementById('f_ddl').value);
   const decision = runDecisionChain(req);
   showDecisionResult(req, decision);
-}
-
-// ===== 批量生成（沿用当前表单模板，逐行改 需求名 / DDL）=====
-let bgRows = [];   // [{ name, ddl }]
-
-function renderBatchGenRows() {
-  const baseDdl = document.getElementById('f_ddl').value || '';
-  const rowsEl = document.getElementById('bgRows');
-  rowsEl.innerHTML = bgRows.map((r, i) => `
-    <div class="bg-row" style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
-      <span class="text-muted text-sm" style="width:22px; text-align:center; flex:none;">${i + 1}</span>
-      <input class="input" data-i="${i}" data-k="name" value="${escapeHtml(r.name || '')}" placeholder="需求名" style="flex:1; min-width:0;">
-      <input class="input" type="date" data-i="${i}" data-k="ddl" value="${escapeHtml(r.ddl || baseDdl)}" style="width:160px; flex:none;">
-      <button class="btn btn-ghost btn-sm" data-del="${i}" title="删除此行" style="flex:none;">✕</button>
-    </div>`).join('') || '<div class="text-muted text-sm" style="padding:8px 0;">暂无行，点「+」增加</div>';
-  rowsEl.querySelectorAll('input[data-i]').forEach(inp => {
-    inp.oninput = () => { const i = +inp.dataset.i, k = inp.dataset.k; bgRows[i][k] = inp.value; };
-  });
-  rowsEl.querySelectorAll('[data-del]').forEach(b => {
-    b.onclick = () => { bgRows.splice(+b.dataset.del, 1); document.getElementById('bgCount').value = bgRows.length; renderBatchGenRows(); };
-  });
-  document.getElementById('bgCount').value = bgRows.length;
-}
-
-function openBatchGen() {
-  const ddl = document.getElementById('f_ddl').value;
-  const pipelines = Array.from(document.querySelectorAll('#f_pipelines input:checked')).map(c => c.value);
-  if (!pipelines.length) { toast('请先在表单至少选一条管线', 'warn'); return; }
-  const cat = document.getElementById('f_category');
-  const catText = cat.options[cat.selectedIndex].text;
-  const pipeText = pipelines.map(p => getPipeline(p)?.name).filter(Boolean).join('、') || '—';
-  const baseName = document.getElementById('f_name').value.trim();
-  const baseDdl = ddl || '';
-  document.getElementById('bgTemplateInfo').textContent =
-    `模板 → 分类：${catText} · 管线：${pipeText} · 提需人：${document.getElementById('f_requester').value.trim() || '—'} · 产出物：${getSelectedAssets().length} 项`;
-  bgRows = [0, 1].map(() => ({ name: baseName, ddl: baseDdl }));
-  document.getElementById('bgPasteArea').style.display = 'none';
-  document.getElementById('bgPaste').value = '';
-  renderBatchGenRows();
-  document.getElementById('batchGenModal').classList.remove('hidden');
-}
-
-function bindBatchGen() {
-  document.getElementById('btnBatchGen').onclick = openBatchGen;
-  document.getElementById('batchGenClose').onclick = () => document.getElementById('batchGenModal').classList.add('hidden');
-  document.getElementById('batchGenCancel').onclick = () => document.getElementById('batchGenModal').classList.add('hidden');
-  document.getElementById('bgPlus').onclick = () => {
-    bgRows.push({ name: document.getElementById('f_name').value.trim(), ddl: document.getElementById('f_ddl').value || '' });
-    renderBatchGenRows();
-  };
-  document.getElementById('bgMinus').onclick = () => { if (bgRows.length > 1) { bgRows.pop(); renderBatchGenRows(); } };
-  document.getElementById('bgCount').onchange = (e) => {
-    const n = Math.max(1, Math.min(99, parseInt(e.target.value) || 1));
-    const bn = document.getElementById('f_name').value.trim(), bd = document.getElementById('f_ddl').value || '';
-    while (bgRows.length < n) bgRows.push({ name: bn, ddl: bd });
-    while (bgRows.length > n) bgRows.pop();
-    renderBatchGenRows();
-  };
-  document.getElementById('bgPasteToggle').onclick = () => {
-    const el = document.getElementById('bgPasteArea');
-    el.style.display = el.style.display === 'none' ? 'block' : 'none';
-  };
-  document.getElementById('bgPasteApply').onclick = () => {
-    const lines = document.getElementById('bgPaste').value.split('\n').map(l => l.trim()).filter(Boolean);
-    if (!lines.length) { toast('请先粘贴名称', 'warn'); return; }
-    const bd = document.getElementById('f_ddl').value || '';
-    bgRows = lines.map(l => {
-      const t = l.indexOf('\t');
-      if (t >= 0) return { name: l.slice(0, t).trim(), ddl: l.slice(t + 1).trim() || bd };
-      return { name: l, ddl: bd };
-    });
-    renderBatchGenRows();
-    toast(`已载入 ${bgRows.length} 个名称`, 'success');
-  };
-  document.getElementById('bgGenerate').onclick = () => {
-    const baseDdl = document.getElementById('f_ddl').value || '';
-    const results = [];
-    let emptyCnt = 0;
-    bgRows.forEach(r => {
-      const name = (r.name || '').trim();
-      const ddl = (r.ddl || baseDdl).trim();
-      if (!name) {
-        // 未填需求名：单独标为打回（rec 占位避免渲染读 null，req 置空避免被误入库）
-        emptyCnt++;
-        results.push({
-          rec: { name: '(未命名) · 缺需求名' },
-          req: null,
-          decision: {
-            priority: 'reject', pass: false, gatePass: false, totalWeeks: 0, approver: '—',
-            prioScore: 0, importanceScore: 0, timeGap: 0,
-            steps: [{ num: 0, title: '基础校验', result: '失败', pass: false, detail: '未填需求名' }]
-          }
-        });
-        return;
-      }
-      const req = buildSingleReq(name, ddl);
-      const decision = runDecisionChain(req);
-      results.push({ rec: null, req, decision });
-    });
-    document.getElementById('batchGenModal').classList.add('hidden');
-    if (emptyCnt) toast(`有 ${emptyCnt} 行未填需求名，已标为打回`, 'warn');
-    showBatchSubmitResult(results);
-    // 批量生成路径直接走 showBatchSubmitResult，没有先 show batchModal，补上
-    const bm = document.getElementById('batchModal');
-    if (bm) bm.classList.remove('hidden');
-  };
 }
 
 // 批量提交：跑所有队列记录的决策链
@@ -4026,15 +3883,7 @@ function showBatchSubmitResult(results) {
   // 渲染所有行
   const renderBody = () => {
     document.getElementById('batchBody').innerHTML = results.map((r, i) => {
-      // 兼容批量生成路径（rec=null，只有 req）：从 req 派生一个虚拟 rec 给渲染用
-      const _catNameMap = { 'lit-plot': '剧情场景', 'lit-world': '世界观场景', 'char-imp': '重点NPC', 'char-minor': 'NPC', 'lit-system': '世界观场景' };
-      const rec = r.rec || (r.req ? {
-        name: r.req.name,
-        bigCategory: _catNameMap[r.req.category] || r.req.category || '-',
-        subScene: '', subChar: '', subLit: '',
-        pipelines: r.req.pipelines || [],
-        ddl: r.req.ddl
-      } : { name: '(未命名)', pipelines: [], ddl: '' });
+      const rec = r.rec;
       const d = r.decision;
       const isFail = r._rejected || d.priority === 'reject' || d.gatePass === false;
       const prioClass = isFail ? 'reject' : (d.priority === 'P0' ? 's' : d.priority === 'P1' ? 'a' : d.priority === 'P2' ? 'b' : (d.priority || 'pending').toLowerCase());

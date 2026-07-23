@@ -3931,6 +3931,9 @@ function bindBatchGen() {
     document.getElementById('batchGenModal').classList.add('hidden');
     if (emptyCnt) toast(`有 ${emptyCnt} 行未填需求名，已标为打回`, 'warn');
     showBatchSubmitResult(results);
+    // 批量生成路径直接走 showBatchSubmitResult，没有先 show batchModal，补上
+    const bm = document.getElementById('batchModal');
+    if (bm) bm.classList.remove('hidden');
   };
 }
 
@@ -4023,6 +4026,15 @@ function showBatchSubmitResult(results) {
   // 渲染所有行
   const renderBody = () => {
     document.getElementById('batchBody').innerHTML = results.map((r, i) => {
+      // 兼容批量生成路径（rec=null，只有 req）：从 req 派生一个虚拟 rec 给渲染用
+      const _catNameMap = { 'lit-plot': '剧情场景', 'lit-world': '世界观场景', 'char-imp': '重点NPC', 'char-minor': 'NPC', 'lit-system': '世界观场景' };
+      const rec = r.rec || (r.req ? {
+        name: r.req.name,
+        bigCategory: _catNameMap[r.req.category] || r.req.category || '-',
+        subScene: '', subChar: '', subLit: '',
+        pipelines: r.req.pipelines || [],
+        ddl: r.req.ddl
+      } : { name: '(未命名)', pipelines: [], ddl: '' });
       const d = r.decision;
       const isFail = r._rejected || d.priority === 'reject' || d.gatePass === false;
       const prioClass = isFail ? 'reject' : (d.priority === 'P0' ? 's' : d.priority === 'P1' ? 'a' : d.priority === 'P2' ? 'b' : (d.priority || 'pending').toLowerCase());
@@ -4034,7 +4046,7 @@ function showBatchSubmitResult(results) {
         ? `<div class="text-sm" style="color:#B91C1C;margin-top:2px;">${escapeHtml(failReason)}</div>`
         : '';
       // 系统性世界观概念警报：文学子分类=系统性设定 → 提醒 PM 特别关注
-      const isSysConcept = (r.req && r.req.category === 'lit-system') || r.rec.subLit === '系统性设定';
+      const isSysConcept = (r.req && r.req.category === 'lit-system') || rec.subLit === '系统性设定';
       const sysWarnLine = isSysConcept
         ? `<div class="text-sm" style="color:#B45309;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:4px 8px;margin-top:4px;">⚠ 此为<b>系统性世界观概念</b>，影响面大，请 PM 特别评估资源与优先级</div>`
         : '';
@@ -4052,7 +4064,7 @@ function showBatchSubmitResult(results) {
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <div style="min-width:0;flex:1;">
                 <span style="color: var(--text-muted); font-size: 11px;">#${i+1}</span>
-                <b>${escapeHtml(r.req ? r.req.name : r.rec.name || '(未命名)')}</b>
+                <b>${escapeHtml(r.req ? r.req.name : rec.name || '(未命名)')}</b>
               </div>
               <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
                 <span class="prio-badge ${prioClass}">${prioLabel}</span>
@@ -4060,9 +4072,9 @@ function showBatchSubmitResult(results) {
               </div>
             </div>
             <div class="text-sm text-muted" style="margin-top: 4px;">
-              分类: ${escapeHtml(r.rec.bigCategory || '-')}${r.rec.subScene || r.rec.subChar || r.rec.subLit ? ' / ' + escapeHtml(r.rec.subScene || r.rec.subChar || r.rec.subLit) : ''}
-              · 管线: ${(r.rec.pipelines || []).join(',') || '-'}
-              · DDL: ${r.rec.ddl || '-'}
+              分类: ${escapeHtml(rec.bigCategory || '-')}${rec.subScene || rec.subChar || rec.subLit ? ' / ' + escapeHtml(rec.subScene || rec.subChar || rec.subLit) : ''}
+              · 管线: ${(rec.pipelines || []).join(',') || '-'}
+              · DDL: ${rec.ddl || '-'}
               · ${d.totalWeeks ? d.totalWeeks.toFixed(1) + '周' : '无'}
               · 审批人: ${d.approver || '—'}
             </div>

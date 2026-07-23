@@ -911,7 +911,7 @@ V129云梦泽剧情场景概念刷新
 const DEFAULT_CONFIG = {
   // 配置版本号：每次改动内置 flows/holidays 结构就 +1，
   // loadState 会强制用新版覆盖旧缓存里的 flows/holidays（保留用户需求/任务）
-  _cfgVersion: 43,
+  _cfgVersion: 44,
   sceneStoryHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   sceneWorldHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   charKeyHours: { 1: 1.5, 2: 0.5, 3: 0.6, 4: 1.2, 5: 1, 6: 2.4, 7: 1, 8: 0.5 },
@@ -1584,6 +1584,19 @@ function runDecisionChain(req) {
   else if (category === 'char-key') step1Result = '角色类 / 重点NPC';
   else step1Result = '角色类 / 普通NPC';
   steps.push({ num: 1, title: '需求分类路由', result: step1Result, pass: true, detail: `分类 = ${step1Result}` });
+
+  // Step 1.5: 文学子分类路由（纯文学类专属规则）
+  //   · 简单补充设定(lit-simple) → 走标准纯文学管线
+  //   · 系统性设定(lit-system) → 标记「PM 单独拉起」，影响面大，需 PM 另行评估资源与优先级
+  const isLitSystem = category === 'lit-system';
+  if (category === 'lit-simple' || category === 'lit-system') {
+    const litLabel = category === 'lit-system' ? '系统性设定（⚠ PM 需单独拉起）' : '简单补充设定';
+    steps.push({ num: 1.5, title: '文学子分类路由', result: litLabel, pass: true,
+      detail: category === 'lit-system'
+        ? '<b>系统性设定</b>：影响面大，可能涉及多环节交叉，请 PM 单独拉起评估资源与优先级。导出 Excel 时将标注「PM单独拉起」。'
+        : '<b>简单补充设定</b>：走标准纯文学管线，按常规流程排期。'
+    });
+  }
 
   // Step 2: 产出物完成度 + 待做清单 + 工期估算（新逻辑）
   const remaining = calculateRemaining(req);
@@ -2562,7 +2575,11 @@ const QUESTIONNAIRE_HEADER_MAP = {
   '其他需求描述': 'desc',
   '需求描述': 'desc',
   '提需人': 'requester',
-  '提单人': 'requester'
+  '提单人': 'requester',
+  // v44: 需求副本字段（腾讯问卷新增）
+  '是否需要添加需求副本': 'needCopy',
+  '是否需要添加需求副本？': 'needCopy',
+  '需求副本信息': 'copyInfo'
 };
 
 // 规范化表头：去除前缀数字、空格、矩阵类的"基础名:选项"后缀
@@ -2846,6 +2863,34 @@ function extractColonSuffix(rawHeader) {
   return m ? m[1].trim() : null;
 }
 
+// v44: 解析「需求副本信息」字段
+// 格式：每份副本 "名称,DDL"，多份用 ; 或换行分隔
+//   例："1jjj,2026-12-05"                → 1 份（名称=1jjj, DDL=2026-12-05）
+//       "副本A,2026-12-05;副本B,2027-01-10" → 2 份
+// 容错：若只有 DDL（无名称），name 留空（调用处回填为主名+#副本）
+function parseCopyInfo(text) {
+  if (!text) return [];
+  const entries = String(text).split(/[;\n\r]+/).map(s => s.trim()).filter(Boolean);
+  const copies = [];
+  entries.forEach(function(entry) {
+    const parts = entry.split(/[,\uff0c]/).map(s => s.trim()); // 中英文逗号
+    if (parts.length >= 2) {
+      copies.push({ name: parts[0], ddl: parts.slice(1).join(',') });
+    } else if (parts.length === 1 && /^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}$/.test(parts[0])) {
+      copies.push({ name: '', ddl: parts[0] });
+    }
+  });
+  return copies;
+}
+
+// v44: 统一 DDL 为 YYYY-MM-DD（兼容 2026/9/30 与 2026-09-30）
+function normalizeDDL(s) {
+  if (!s) return '';
+  const m = String(s).match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+  return String(s).trim();
+}
+
 // 解析腾讯问卷多列格式
 // 注意：cell 内的换行（多选用 \n 分隔）会被错误切分成多行，
 // 因此采用"按 tab 数对齐"的策略：表头有 N 列，数据行 cells.length 应 = N，
@@ -2923,6 +2968,12 @@ function parseQuestionnaireMultiCol(text) {
         if (!rec._specialItems) rec._specialItems = [];
         const itemName = extractBracketItem(rawHeaders[j] || '');
         if (itemName) rec._specialItems.push(itemName);
+      } else if (key === 'needCopy') {
+        // "14.是否需要添加需求副本？" → "A.是，需要添加副本" / "B.否，不需要"
+        rec.needCopy = stripMatrixPrefix(raw);
+      } else if (key === 'copyInfo') {
+        // "15.需求副本信息" → "1jjj,2026-12-05"（名称,DDL；多个副本用 ; 或换行分隔）
+        rec.copyInfo = raw;
       } else {
         rec[key] = stripMatrixPrefix(raw);
       }
@@ -2934,7 +2985,27 @@ function parseQuestionnaireMultiCol(text) {
     if (rec._specialItems) { rec.specialItems = rec._specialItems; delete rec._specialItems; }
     if (rec.name) records.push(rec);
   });
-  return records;
+
+  // v44: 展开需求副本
+  //   needCopy 含「是/需要」且 copyInfo 有内容 → 主需求 + N 份副本需求
+  //   副本记录继承主需求全部字段，仅改 name / ddl，并标记 _copyOf 便于队列识别
+  const expanded = [];
+  records.forEach(function(rec) {
+    expanded.push(rec);
+    if (rec.needCopy && /是|需要/.test(rec.needCopy) && rec.copyInfo) {
+      const copies = parseCopyInfo(rec.copyInfo);
+      copies.forEach(function(c) {
+        const copyRec = Object.assign({}, rec);
+        copyRec.name = c.name || (rec.name + ' #副本');
+        copyRec.ddl = normalizeDDL(c.ddl);
+        copyRec._copyOf = rec.name;
+        copyRec.needCopy = '';
+        copyRec.copyInfo = '';
+        expanded.push(copyRec);
+      });
+    }
+  });
+  return expanded;
 }
 
 // 解析简单格式（按行/按列的旧格式）
@@ -3235,6 +3306,7 @@ function renderPendingQueue() {
       <div class="pending-item-head">
         <span class="pending-item-idx">${i+1}</span>
         <span class="pending-item-name" title="${escapeHtml(r.name || '(未命名)')}">${escapeHtml(r.name || '(未命名)')}</span>
+        ${r._copyOf ? `<span class="pending-item-copy" title="副本 of ${escapeHtml(r._copyOf)}" style="font-size:10px;color:#B45309;background:#FEF3C7;border:1px solid #FCD34D;border-radius:3px;padding:0 4px;margin-left:4px;white-space:nowrap;">副本</span>` : ''}
         <span class="pending-item-status ${statusClass}">${statusLabel}</span>
       </div>
       <div class="pending-item-meta">
@@ -5207,22 +5279,30 @@ function _exportComputeCapacity(makeTaskRows, groupOrder, reqMap, POOL) {
 
 // 子步骤B：Sheet2「优先级&审批」
 function _exportBuildInfoSheet(wb, groupOrder, reqMap, statusMap, calcTier) {
-  var infoRows = [['需求名称','分类','管线','排期档位','优先分','审批人','重要分','DDL','状态']];
+  var infoRows = [['需求名称','分类','管线','排期档位','优先分','审批人','重要分','DDL','状态','PM单独拉起']];
   groupOrder.forEach(function(rid){
     var r = reqMap[rid]||{};
     infoRows.push([ r.name||'', r.category||'', (r.pipelines||[]).join(', '),
       calcTier(r.prioScore), r.prioScore!=null?r.prioScore:'', r.approver||'',
-      r.importanceScore!=null?r.importanceScore:'', r.ddl||'', statusMap[r.status]||r.status||'' ]);
+      r.importanceScore!=null?r.importanceScore:'', r.ddl||'', statusMap[r.status]||r.status||'',
+      r.category === 'lit-system' ? '是（系统性设定，需 PM 另行评估）' : '' ]);
   });
   var ws2 = XLSX.utils.aoa_to_sheet(infoRows);
-  ws2['!cols'] = [{wch:22},{wch:12},{wch:18},{wch:8},{wch:6},{wch:14},{wch:6},{wch:12},{wch:8}];
+  ws2['!cols'] = [{wch:22},{wch:12},{wch:18},{wch:8},{wch:6},{wch:14},{wch:6},{wch:12},{wch:8},{wch:20}];
   for(var R=1;R<infoRows.length;R++){
     var addr = XLSX.utils.encode_cell({r:R,c:3}); var tv = ws2[addr]?ws2[addr].v:'';
     if(tv==='S') ws2[addr].s={ fill:{fgColor:{rgb:'FEE2E2'}}, font:{color:{rgb:'DC2626'},bold:true}, alignment:{horizontal:'center'} };
     else if(tv==='A') ws2[addr].s={ fill:{fgColor:{rgb:'FFF7ED'}}, font:{color:{rgb:'EA580C'},bold:true}, alignment:{horizontal:'center'} };
     else if(tv==='B') ws2[addr].s={ fill:{fgColor:{rgb:'F3F4F6'}}, font:{color:{rgb:'6B7280'}}, alignment:{horizontal:'center'} };
   }
-  for(var c=0;c<9;c++){ var a=XLSX.utils.encode_cell({r:0,c:c}); if(ws2[a]) ws2[a].s={ fill:{fgColor:{rgb:'1F4E79'}}, font:{color:{rgb:'FFFFFF'},bold:true}, alignment:{horizontal:'center'} }; }
+  for(var c=0;c<10;c++){ var a=XLSX.utils.encode_cell({r:0,c:c}); if(ws2[a]) ws2[a].s={ fill:{fgColor:{rgb:'1F4E79'}}, font:{color:{rgb:'FFFFFF'},bold:true}, alignment:{horizontal:'center'} }; }
+  // 「PM单独拉起」列数据行标黄底橙字，醒目提示
+  for(var R=1;R<infoRows.length;R++){
+    var a9 = XLSX.utils.encode_cell({r:R,c:9});
+    if(ws2[a9] && ws2[a9].v){
+      ws2[a9].s = { fill:{fgColor:{rgb:'FEF3C7'}}, font:{color:{rgb:'B45309'},bold:true}, alignment:{horizontal:'center'} };
+    }
+  }
   XLSX.utils.book_append_sheet(wb, ws2, '优先级&审批');
 }
 
@@ -5413,8 +5493,10 @@ function exportExcelGantt() {
           ownerRole = t.litRole ? 'lit' : makeRole(t.nodeName, r.category);
           ownerName = POOL[ownerRole].name;
         }
+        var isSysLit = (r.category === 'lit-system');
+        var sysTag = isSysLit ? ' 🔔PM单独拉起' : '';
         var row = [
-          (r.name||'') + (overDDL ? ' ⚠超DDL' : ''),
+          (r.name||'') + (overDDL ? ' ⚠超DDL' : '') + sysTag,
           pl,
           r.ddl||'',   // 用户要求：直接照搬 DDL
           statusMap[t.status]||t.status||'待开始',

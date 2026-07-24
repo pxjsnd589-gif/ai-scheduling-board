@@ -661,6 +661,8 @@ V129云梦泽剧情场景概念刷新
                   <option value="scene-world">场景类 / 世界观场景</option>
                   <option value="char-key">角色类 / 重点NPC</option>
                   <option value="char-normal">角色类 / 普通NPC</option>
+                  <option value="lit-simple">纯文学类 / 简单补充设定</option>
+                  <option value="lit-system">纯文学类 / 系统性设定</option>
                 </select>
               </div>
               <div class="field"><label class="field-label">DDL <span class="req">*</span></label>
@@ -717,6 +719,7 @@ V129云梦泽剧情场景概念刷新
                 <option value="">全部分类</option>
                 <option value="scene">场景类</option>
                 <option value="char">角色类</option>
+                <option value="lit">纯文学类</option>
               </select>
               <select class="select" id="poolFilterPrio" style="width:100px;">
                 <option value="">全部优先级</option>
@@ -788,6 +791,26 @@ V129云梦泽剧情场景概念刷新
       <div class="modal-footer-right">
         <button class="btn btn-secondary" id="sizePickerCancel">取消</button>
         <button class="btn btn-primary" id="sizePickerConfirm">确认并排期</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="modePickerModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <div class="modal-title">选择产出模式</div>
+      <button class="modal-close" id="modePickerClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="text-muted text-sm" style="margin-bottom:12px;">以下产出物有不同开发模式，请选择对应模式，排期将据此计算工期。</div>
+      <div id="modePickerBody"></div>
+    </div>
+    <div class="modal-footer">
+      <div></div>
+      <div class="modal-footer-right">
+        <button class="btn btn-secondary" id="modePickerCancel">取消</button>
+        <button class="btn btn-primary" id="modePickerConfirm">确认并排期</button>
       </div>
     </div>
   </div>
@@ -911,7 +934,7 @@ V129云梦泽剧情场景概念刷新
 const DEFAULT_CONFIG = {
   // 配置版本号：每次改动内置 flows/holidays 结构就 +1，
   // loadState 会强制用新版覆盖旧缓存里的 flows/holidays（保留用户需求/任务）
-  _cfgVersion: 44,
+  _cfgVersion: 48,
   sceneStoryHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   sceneWorldHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   charKeyHours: { 1: 1.5, 2: 0.5, 3: 0.6, 4: 1.2, 5: 1, 6: 2.4, 7: 1, 8: 0.5 },
@@ -1085,7 +1108,8 @@ const PIPELINE_REQUIRED = {
     '英雄角色卡'                                    // 角色设定
   ],
   '战场玩法线': [
-    '印象图', '设定图', '三视图'                   // 角色原画（矩阵中无角色卡）
+    '印象图', '设定图',                            // 角色原画
+    '概念方向草图', '概念图'                       // 场景原画
   ],
   '系统线': [
     '印象图', '设定图',                            // 角色原画（矩阵中系统线三视图未打√）
@@ -1174,7 +1198,13 @@ const DEFAULT_ITEM_TIME = {
   '道具设定': { sizes: { 中: 5, 小: 2 }, unit: '人天', per: '件' },
   'NPC角色卡': { min: 2, max: 3, unit: '人天', per: '角色' },
   '重点NPC角色卡': { min: 7, max: 8, unit: '人天', per: '角色' },
-  '英雄角色卡': { min: 6, max: 8, unit: '人天', per: '角色' },
+  // 英雄角色卡双模式：整组开发（4人·30工作日·约12储备+8重点）vs 单角色（6~8人天/角色）
+  '英雄角色卡': {
+    modes: {
+      '整组开发': { min: 30, max: 30, unit: '人天', per: '组', desc: '4人全人力·30工作日·约12储备+8重点角色' },
+      '单角色': { min: 6, max: 8, unit: '人天', per: '角色', desc: '单个英雄角色独立开发' }
+    }
+  },
 };
 
 // 当前生效的工时表：优先用用户在设置页编辑过的 state.config.itemTime，否则用内置默认
@@ -1187,6 +1217,10 @@ function getItemTable() {
 function getItemTime(itemName) {
   const t = getItemTable()[itemName];
   if (!t) return { min: 0, max: 0, unit: '人天', per: '' };
+  if (t.modes) {
+    const first = t.modes[Object.keys(t.modes)[0]];
+    return { min: first.min, max: first.max, unit: first.unit, per: first.per };
+  }
   if (t.sizes) return { min: t.sizes['中'] || Object.values(t.sizes)[0], max: t.sizes['中'] || Object.values(t.sizes)[0], unit: t.unit, per: t.per };
   return { min: t.min, max: t.max, unit: t.unit, per: t.per };
 }
@@ -1198,10 +1232,15 @@ function formatItemTime(t) {
   return `${t.min}~${t.max} ${t.unit}/${t.per}`;
 }
 
-// v10: 工时表联动 —— 取某产出物工时的「中位数」（(min+max)/2；多档 sizes 按选定档位，未选用"中"或首档）
+// v10: 工时表联动 —— 取某产出物工时的「中位数」（(min+max)/2；多档 sizes 按选定档位，未选用"中"或首档；modes 按选定模式）
 function itemMedianDays(itemName, sizeChoice) {
   const t = getItemTable()[itemName];
   if (!t) return 0;
+  if (t.modes) {
+    const modeName = (sizeChoice && t.modes[sizeChoice]) ? sizeChoice : Object.keys(t.modes)[0];
+    const m = t.modes[modeName];
+    return Math.round(((m.min + m.max) / 2) * 10) / 10;
+  }
   if (t.sizes) {
     if (sizeChoice && t.sizes[sizeChoice] != null) return t.sizes[sizeChoice];
     return t.sizes['中'] != null ? t.sizes['中'] : (Object.values(t.sizes)[0] || 0);
@@ -1212,6 +1251,11 @@ function itemMedianDays(itemName, sizeChoice) {
 function isMultiSizeItem(itemName) {
   const t = getItemTable()[itemName];
   return !!(t && t.sizes && Object.keys(t.sizes).length >= 2);
+}
+// 判断某产出物是否「多模式」（如英雄角色卡的整组开发/单角色）
+function isMultiModeItem(itemName) {
+  const t = getItemTable()[itemName];
+  return !!(t && t.modes && Object.keys(t.modes).length >= 2);
 }
 // ===== v10: 文学环节动态展开（按管线必做 + 勾选选做） =====
 // 文学四个二级分类
@@ -1224,18 +1268,27 @@ function isLitItem(itemName) {
   return !!(p && p.big === '文学');
 }
 // 美术产出物按需求分类过滤（用户规则 2026-07-21）：
-//   此规则【只针对美术产出物】——
-//   · 分类为「场景类」(scene-*) → 只保留「场景原画」的美术项，剔除「角色原画」项
-//   · 分类为「角色类」(char-*)  → 只保留「角色原画」的美术项，剔除「场景原画」项
-//   文学项一律不受影响；「按勾选顺序判断必做」的逻辑也不变（本函数只做取舍，不改顺序判定）
-//   解决的 bug：剧情场景勾了 CG 管线，却被 PIPELINE_REQUIRED 带出角色原画的「设定图」
+//   此规则针对【所有产出物】——
+//   · 分类为「场景类」(scene-*) → 只保留「场景原画」的美术项 + 文学(Bible/叙事/物料)；剔除「角色原画」+「文学>角色设定」(NPC角色卡等)
+//   · 分类为「角色类」(char-*)  → 只保留「角色原画」的美术项；剔除「场景原画」(文学项不限制)
+//   · 分类为「纯文学类」(lit-*)   → 不限制（纯文学可包含任何文学产出）
+//   解决的 bug：剧情场景需求被 PIPELINE_REQUIRED 带出「NPC角色卡」（文学>角色设定 不该出现在场景类管线中）
 function artItemAllowedForCategory(itemName, category) {
   const p = getAssetPath(itemName);
-  if (!p || p.big !== '美术') return true;   // 非美术项（文学等）不受此规则限制
+  if (!p) return true;   // 未知项放行
   const cat = category || '';
-  if (cat.startsWith('scene')) return p.mid === '场景原画';   // 场景类只要场景原画
-  if (cat.startsWith('char'))  return p.mid === '角色原画';   // 角色类只要角色原画
-  return true;   // 纯文学类等其它分类：不限制美术（理论上也不该有美术项）
+  if (cat.startsWith('scene')) {
+    // 场景类：美术只要场景原画；文学排除角色设定（NPC角色卡/重点NPC角色卡/英雄角色卡）
+    if (p.big === '美术') return p.mid === '场景原画';
+    if (p.big === '文学' && p.mid === '角色设定') return false;
+    return true;
+  }
+  if (cat.startsWith('char')) {
+    // 角色类：美术只要角色原画；文学不限制（角色设定/Bible/叙事均可）
+    if (p.big === '美术') return p.mid === '角色原画';
+    return true;
+  }
+  return true;   // 纯文学类等其它分类：全放行
 }
 // 某需求实际要做的「文学产出项」清单（必做 + 勾选的选做，仅文学大类），
 // 按 ASSETS_TREE 文学分类顺序（Bible→叙事→物料→角色）+ 组内顺序排列
@@ -1268,12 +1321,23 @@ function buildLitNodes(litList) {
   return nodes;
 }
 // 展开后的实际流程节点（把 litExpand 占位节点替换成动态文学节点）
+// v46: 当 litExpand 展开为空（该需求无文学产出项）时，同时跳过紧随其后的「文学评审」节点
 function expandedFlowNodes(req, flowNodes) {
   const out = [];
+  let skipNextLitReview = false;   // 标记：上一步 litExpand 为空 → 跳过下一个文学评审
   flowNodes.forEach(function(node){
+    if (skipNextLitReview && node.type === 'review' && node.name === '文学评审') {
+      skipNextLitReview = false;   // 消费掉这个标记，跳过此节点
+      return;
+    }
     if (node.litExpand) {
       const litNodes = buildLitNodes(litItemsForReq(req));
-      if (litNodes.length) out.push.apply(out, litNodes);   // 无文学项 → 省略占位
+      if (litNodes.length) {
+        out.push.apply(out, litNodes);   // 有文学项 → 展开
+        skipNextLitReview = false;
+      } else {
+        skipNextLitReview = true;        // 无文学项 → 省略占位，并标记跳过后续文学评审
+      }
     } else {
       out.push(node);
     }
@@ -1301,19 +1365,32 @@ function itemRangeLabel(itemName) {
   return t.min === t.max ? `${t.min}天` : `${t.min}-${t.max}天`;
 }
 // 计算 flow 节点的实际工期：litBundle → 各项相加；带 item → 中位数×数量（多档按 sizeChoice）；否则固定 days
-function nodeDays(node, sizeChoice, sizeChoices) {
+function nodeDays(node, sizeChoice, sizeChoices, modeChoice) {
   if (node.litBundle) return litBundleDays(node, sizeChoices);
   if (node.item && getItemTable()[node.item]) {
+    const t = getItemTable()[node.item];
+    if (t.modes) {
+      const modeName = (modeChoice && t.modes[modeChoice]) ? modeChoice : Object.keys(t.modes)[0];
+      const m = t.modes[modeName];
+      const qty = node.qty != null ? node.qty : 1;
+      return Math.max(1, Math.round(((m.min + m.max) / 2) * qty));
+    }
     const qty = node.qty != null ? node.qty : 1;
     return Math.max(1, Math.round(itemMedianDays(node.item, sizeChoice) * qty));
   }
   return node.days != null ? node.days : 1;
 }
-// 流程名 + 工时标注：litBundle → "Bible设定（xxx、yyy）"；多档 "名（中·5天）"；单档 "名（3-5天）"
-function nodeDisplayName(node, sizeChoice) {
+// 流程名 + 工时标注：litBundle → "Bible设定（xxx、yyy）"；多档 "名（中·5天）"；多模式 "名（整组开发·30天）"；单档 "名（3-5天）"
+function nodeDisplayName(node, sizeChoice, modeChoice) {
   if (node.litBundle) return litBundleName(node);
   if (node.item && getItemTable()[node.item]) {
     const t = getItemTable()[node.item];
+    if (t.modes) {
+      const modeName = (modeChoice && t.modes[modeChoice]) ? modeChoice : Object.keys(t.modes)[0];
+      const m = t.modes[modeName];
+      const rng = m.min === m.max ? `${m.min}` : `${m.min}-${m.max}`;
+      return `${node.name}（${modeName}·${rng}天）`;
+    }
     if (t.sizes && Object.keys(t.sizes).length >= 2) {
       const size = (sizeChoice && t.sizes[sizeChoice] != null) ? sizeChoice
         : (t.sizes['中'] != null ? '中' : Object.keys(t.sizes)[0]);
@@ -1482,6 +1559,7 @@ function normalizeReq(req) {
   if (!Array.isArray(req.hasAssets)) req.hasAssets = [];
   if (!Array.isArray(req.specialItems)) req.specialItems = [];   // 关键：特殊需求（选做项）
   if (req.sizeChoices == null) req.sizeChoices = {};
+  if (req.modeChoices == null) req.modeChoices = {};   // 多模式产出物（如英雄角色卡）
   return req;
 }
 function getTask(taskId) { return state.tasks.find(t => t.id === taskId); }
@@ -1501,8 +1579,13 @@ function toast(msg, type = 'info') {
 function calculateRemaining(req) {
   const existingSet = new Set(req.hasAssets);  // 已有具体项
   const specialSet = new Set(req.specialItems || []);  // 特殊需求具体项
-  const pipeIds = req.pipelines || [];
+  let pipeIds = req.pipelines || [];
   const category = req.category || '';   // 用于美术产出物按分类过滤（场景/角色）
+  // v48: 纯文学类需求(lit-simple/lit-system)的文学产出物全部在 Bible概念 管线下，
+  //   即使用户未勾选 Bible概念 管线，也自动纳入计算（否则文学项永远丢失→不展开→不排期）
+  if (category === 'lit-simple' || category === 'lit-system') {
+    if (!pipeIds.includes('bible')) pipeIds = pipeIds.concat('bible');
+  }
   const requiredTodo = [];  // 必做待做
   const optionalTodo = [];  // 可选待做（特殊需求）
 
@@ -1631,12 +1714,26 @@ function runDecisionChain(req) {
   steps.push({ num: 3, title: '工期估算', result: `总计 ${totalDays.min === totalDays.max ? totalDays.min : totalDays.min + '~' + totalDays.max} 人天 (≈${totalWeeks.toFixed(1)} 周)`, pass: true, detail: step3Detail });
 
   // Step 4: 可行性判定
+  // ⚠️ v44 修正：旧逻辑只算"制作"人天(totalWeeks)，漏了评审/周会同步节点 + 末尾 PM 缓冲，
+  //   导致决策链说"可行"但排期引擎(含全部节点+缓冲)却超 DDL，两者对不齐。
+  //   现改为与排期引擎一致的工期口径：制作周 + 会议周(评审/同步，每节点1天) + 缓冲周。
   const today = new Date();
   const ddl = new Date(req.ddl);
   const remainWeeks = diffWeeks(ddl, today);
-  const timeGap = remainWeeks - totalWeeks;
+  const bcfg = (state.config && state.config.buffer) || { ratio: 0.15, minWeeks: 1, maxWeeks: 3 };
+  const bufW = Math.max(bcfg.minWeeks || 0, Math.min(bcfg.maxWeeks || 99, totalWeeks * (bcfg.ratio || 0)));
+  // 统计该分类 flow 里评审(review)/同步(sync)节点数（各 1 个工作日）
+  let _meetingDays = 0;
+  const _flow = (state.config && state.config.flows && state.config.flows[req.category]) || null;
+  if (_flow && _flow.nodes) _flow.nodes.forEach(function(n){ if (n.type === 'review' || n.type === 'sync') _meetingDays += 1; });
+  const meetingWeeks = _meetingDays / 5;
+  const estWeeks = totalWeeks + meetingWeeks + bufW;   // 与排期引擎一致的真实工期口径
+  const timeGap = remainWeeks - estWeeks;
   const gatePass = timeGap >= 0;
-  steps.push({ num: 4, title: '可行性判定', result: gatePass ? '通过' : '不通过', pass: gatePass, detail: `剩余时间 = ${remainWeeks.toFixed(1)} 周 - 工作量 ${totalWeeks.toFixed(1)} 周 = ${timeGap.toFixed(1)} 周` });
+  steps.push({ num: 4, title: '可行性判定', result: gatePass ? '通过' : '超DDL', pass: true,
+    detail: `剩余时间 = ${remainWeeks.toFixed(1)} 周<br>` +
+            `真实工期 = ${estWeeks.toFixed(1)} 周<br>` +
+            `余量 = ${timeGap.toFixed(1)} 周${gatePass ? '' : '（超DDL）'}` });
 
   // 为 autoSchedule 准备 tasksToCreate（兼容老接口）
   const tasksToCreate = [];
@@ -1679,17 +1776,17 @@ function runDecisionChain(req) {
   const detailParts = [];
   const catLabel = isChar ? '角色类' : '场景类';
   if (needsDong) {
-    approver = '总监审';
-    detailParts.push('涉及 Bible/区域/叙事 -> 推总监审');
+    approver = '东哥';
+    detailParts.push('涉及 Bible/区域/叙事 -> 推东哥');
   }
   if (importanceScore >= it.P0) {
-    approver = '总监审';
+    approver = '东哥';
     detailParts.push(`内部重要程度 ${importanceScore}（>=${it.P0}，P0）-> ${catLabel} -> ${approver}`);
   } else if (importanceScore >= it.P1) {
-    approver = 'Leader审';
+    approver = isChar ? 'Kuki' : '庄哥';
     detailParts.push(`内部重要程度 ${importanceScore}（${it.P1}~${it.P0-1}，P1）-> ${catLabel} -> ${approver}`);
   } else if (importanceScore >= it.P2) {
-    approver = '对接人审';
+    approver = isChar ? '飞飞' : 'Aiko';
     detailParts.push(`内部重要程度 ${importanceScore}（${it.P2}~${it.P1-1}，P2）-> ${catLabel} -> ${approver}`);
   } else {
     if (approver === '---') approver = '---（无内部重要程度，建议打回）';
@@ -1910,6 +2007,8 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
       }
       // 多档产出物：PM 在排期前按 item 选的档位，存在 req.sizeChoices['item:'+item]
       var sizeChoice = (node.item && req.sizeChoices) ? (req.sizeChoices['item:' + node.item] || null) : null;
+      // 多模式产出物（如英雄角色卡整组/单角色）：PM 选的模式，存在 req.modeChoices['item:'+item]
+      var modeChoice = (node.item && req.modeChoices) ? (req.modeChoices['item:' + node.item] || null) : null;
       var planStart, planEnd, offMeeting = false, nodeSeatDelayed = false;
       var afterPrev = new Date(pEnd); afterPrev.setDate(afterPrev.getDate() + 1);
       if (isMeeting) {
@@ -1923,7 +2022,7 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
         }
         planEnd = new Date(planStart);                        // 事件 1 天
       } else {
-        var _days = nodeDays(node, sizeChoice, req.sizeChoices);
+        var _days = nodeDays(node, sizeChoice, req.sizeChoices, modeChoice);
         var ownerBusy = oLast[ownerId] ? new Date(oLast[ownerId]) : null;
         var cur = _nextWorkday(afterPrev);
         // ignoreSeatWait=true（人力重组模式）：不等座位空出，尽早排（会与他人并发→标人力不足）
@@ -1935,10 +2034,10 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
         id: uuid(),
         reqId: req.id,
         nodeIdx: idx,
-        nodeName: nodeDisplayName(node, sizeChoice),
+        nodeName: nodeDisplayName(node, sizeChoice, modeChoice),
         nodeType: node.type,            // make / review / sync / hr / archive
-        days: isMeeting ? 1 : nodeDays(node, sizeChoice, req.sizeChoices),
-        weeks: (isMeeting ? 1 : nodeDays(node, sizeChoice, req.sizeChoices)) / 7,
+        days: isMeeting ? 1 : nodeDays(node, sizeChoice, req.sizeChoices, modeChoice),
+        weeks: (isMeeting ? 1 : nodeDays(node, sizeChoice, req.sizeChoices, modeChoice)) / 7,
         offMeeting: offMeeting,
         seatDelayed: nodeSeatDelayed,   // 该制作节点因等工种座位而被迫推后（人力瓶颈）
         litRole: !!node.litRole,        // 文学制作节点 → 导出用蓝色
@@ -3915,36 +4014,35 @@ function submitBatch() {
 }
 
 // 展示批量决策结果
+// v46: 去掉打回机制 — 超DDL的需求也入库排期，仅标注"超DDL"供PM参考
 function showBatchSubmitResult(results) {
   const modal = document.getElementById('batchModal');
 
   // 初始化每条的 UI 状态（首次打开弹窗时）
   results.forEach(r => {
-    if (r._rejected === undefined) r._rejected = r.decision.priority === 'reject';
+    if (r._rejected === undefined) r._rejected = false;
     if (r._selected === undefined) {
-      // 默认：决策可行 + 没被打回 → 选中；超时 / reject → 不选中
-      r._selected = r.decision.priority !== 'reject' && r.decision.gatePass !== false && !r._rejected;
+      // v46: 默认全部选中（包括超DDL的），PM入库时已能看到超DDL标注
+      r._selected = !r._rejected;
     }
   });
 
-  // 统计：通过 / 打回 / 选中（可入库）
+  // 统计：超DDL / 正常 / 选中（可入库）
   const countStats = () => {
-    const passed = results.filter(r =>
-      !r._rejected && r.decision.priority !== 'reject' && r.decision.gatePass !== false);
-    const failed = results.filter(r =>
-      r._rejected || r.decision.priority === 'reject' || r.decision.gatePass === false);
+    const overdue = results.filter(r => r.decision.gatePass === false);
+    const normal = results.filter(r => r.decision.gatePass !== false);
     const selected = results.filter(r => r._selected && !r._rejected);
-    return { passed, failed, selected };
+    return { overdue, normal, selected };
   };
 
   // 更新标题栏 + 底部状态 + 按钮文字
   const updateHeader = () => {
-    const { passed, failed, selected } = countStats();
+    const { overdue, selected } = countStats();
     document.getElementById('batchSummary').textContent =
-      `共 ${results.length} 条 · ✓${passed.length} 通过 / ✗${failed.length} 打回`;
-    document.getElementById('batchStatus').textContent = failed.length
-      ? `⚠ 包含 ${failed.length} 条打回条目（未勾选=不导入，编辑=跳到表单修改，打回=强制标为打回）`
-      : '全部通过，可直接入库';
+      `共 ${results.length} 条${overdue.length ? ` · ⚠${overdue.length} 条超DDL` : ''}`;
+    document.getElementById('batchStatus').textContent = overdue.length
+      ? `⚠ 包含 ${overdue.length} 条超DDL条目（PM 已可见，仍可正常入库排期）`
+      : '全部正常，可直接入库';
     const btn = document.getElementById('batchImportSelected');
     if (btn) {
       btn.disabled = selected.length === 0;
@@ -3957,26 +4055,26 @@ function showBatchSubmitResult(results) {
     document.getElementById('batchBody').innerHTML = results.map((r, i) => {
       const rec = r.rec;
       const d = r.decision;
-      const isFail = r._rejected || d.priority === 'reject' || d.gatePass === false;
-      const prioClass = isFail ? 'reject' : (d.priority === 'P0' ? 's' : d.priority === 'P1' ? 'a' : d.priority === 'P2' ? 'b' : (d.priority || 'pending').toLowerCase());
-      const gateLabel = d.gatePass === true ? '✓ 可行' : d.gatePass === false ? '✗ 超时' : '—';
-      const failReason = isFail && d.steps && d.steps.length
-        ? (d.steps.find(s => !s.pass)?.detail || '打回原因见决策链')
-        : '';
-      const reasonLine = failReason
-        ? `<div class="text-sm" style="color:#B91C1C;margin-top:2px;">${escapeHtml(failReason)}</div>`
+      const isOverdue = d.gatePass === false;
+      const isRejected = r._rejected || d.priority === 'reject';
+      const prioClass = isRejected ? 'reject' : (d.priority === 'P0' ? 's' : d.priority === 'P1' ? 'a' : d.priority === 'P2' ? 'b' : (d.priority || 'pending').toLowerCase());
+      const gateLabel = d.gatePass === true ? '✓ 可行' : d.gatePass === false ? '✗ 超DDL' : '—';
+      // v46: 超DDL时只显示简化文本（剩余时间/真实工期/余量）
+      const step4Detail = (d.steps && d.steps.find(s => s.num === 4))?.detail || '';
+      const overdueLine = isOverdue && step4Detail
+        ? `<div class="text-sm" style="color:#B91C1C;margin-top:2px;font-size:11.5px;">${escapeHtml(step4Detail)}</div>`
         : '';
       // 系统性世界观概念警报：文学子分类=系统性设定 → 提醒 PM 特别关注
       const isSysConcept = (r.req && r.req.category === 'lit-system') || rec.subLit === '系统性设定';
       const sysWarnLine = isSysConcept
         ? `<div class="text-sm" style="color:#B45309;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:4px 8px;margin-top:4px;">⚠ 此为<b>系统性世界观概念</b>，影响面大，请 PM 特别评估资源与优先级</div>`
         : '';
-      const prioLabel = r._rejected
+      const prioLabel = isRejected
         ? '已打回'
-        : (d.priority === 'reject' ? '打回' : (d.gatePass === false ? '超时' : (d.priority === 'P0' ? 'S' : d.priority === 'P1' ? 'A' : d.priority === 'P2' ? 'B' : d.priority)));
-      return `<div class="batch-row${isFail ? ' failed' : ''}${r._rejected ? ' manually-rejected' : ''}" data-idx="${i}" style="
-        padding: 10px 12px; border: 1px solid ${isFail ? '#FCA5A5' : '#D1D5DB'};
-        border-radius: 6px; background: ${isFail ? '#FEF2F2' : '#fff'};
+        : (d.priority === 'reject' ? '打回' : (d.priority === 'P0' ? 'S' : d.priority === 'P1' ? 'A' : d.priority === 'P2' ? 'B' : d.priority || '-'));
+      return `<div class="batch-row${isOverdue ? ' overdue-warn' : ''}${isRejected ? ' manually-rejected' : ''}" data-idx="${i}" style="
+        padding: 10px 12px; border: 1px solid ${isOverdue ? '#E8942A' : (isRejected ? '#FCA5A5' : '#D1D5DB')};
+        border-radius: 6px; background: ${isOverdue ? 'rgba(242,153,58,0.12)' : (isRejected ? '#FEF2F2' : '#fff')};
         margin-bottom: 6px; opacity: ${r._selected ? '1' : '0.6'};">
         <div style="display:flex;align-items:flex-start;gap:10px;">
           <input type="checkbox" class="batch-row-check" data-idx="${i}" ${r._selected ? 'checked' : ''}
@@ -3989,32 +4087,25 @@ function showBatchSubmitResult(results) {
               </div>
               <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
                 <span class="prio-badge ${prioClass}">${prioLabel}</span>
-                <span class="text-sm text-muted">${gateLabel}</span>
+                <span class="text-sm" style="${isOverdue ? 'color:#DC2626;font-weight:600;' : ''}">${gateLabel}</span>
               </div>
             </div>
             <div class="text-sm text-muted" style="margin-top: 4px;">
-              分类: ${escapeHtml(rec.bigCategory || '-')}${rec.subScene || rec.subChar || rec.subLit ? ' / ' + escapeHtml(rec.subScene || rec.subChar || rec.subLit) : ''}
-              · 管线: ${(rec.pipelines || []).join(',') || '-'}
-              · DDL: ${rec.ddl || '-'}
-              · ${d.totalWeeks ? d.totalWeeks.toFixed(1) + '周' : '无'}
+              DDL: ${rec.ddl || '-'}
               · 审批人: ${d.approver || '—'}
             </div>
-            ${reasonLine}
+            ${overdueLine}
             ${sysWarnLine}
-            ${(!isFail && r.req) ? (function(){ var ns = generateReqNames(r.req); return ns.length ? `<div class="text-sm" style="margin-top:4px;color:#4B5563;background:#F3F4F6;border-radius:4px;padding:4px 8px;"><span style="color:#6B7280;">规范名：</span>${ns.map(function(n){return '<code style="font-family:Consolas,Monaco,monospace;">'+escapeHtml(n)+'</code>';}).join('　')} <button class="btn btn-ghost btn-sm" onclick="window._copyAllReqNames(this)" data-names="${escapeHtml(ns.join('\n'))}" style="padding:0 6px;">复制</button></div>` : ''; })() : ''}
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
             <button class="btn btn-ghost btn-sm batch-row-edit" data-idx="${i}" title="关闭弹窗，跳到录入表单修改此条">编辑</button>
-            <button class="btn btn-ghost btn-sm batch-row-reject" data-idx="${i}"
-              style="${r._rejected ? 'color:#B91C1C;border-color:#FCA5A5;background:#FEF2F2;' : ''}"
-              title="标记为打回（不导入）">${r._rejected ? '撤销打回' : '打回'}</button>
           </div>
         </div>
       </div>`;
     }).join('');
   };
 
-  // 事件代理：勾选 / 编辑 / 打回
+  // 事件代理：勾选 / 编辑
   const bodyEl = document.getElementById('batchBody');
   bodyEl.onclick = (e) => {
     const t = e.target;
@@ -4031,18 +4122,6 @@ function showBatchSubmitResult(results) {
       const idx = (state._pendingRecords || []).indexOf(results[i].rec);
       if (idx >= 0) selectPendingRecord(idx);
       toast(`已切换到第 ${i+1} 条进行编辑`, 'info');
-    } else if (t.classList.contains('batch-row-reject')) {
-      const i = +t.dataset.idx;
-      results[i]._rejected = !results[i]._rejected;
-      // 打回后强制取消勾选；撤销打回时恢复默认勾选（仅对决策可行的）
-      if (results[i]._rejected) {
-        results[i]._selected = false;
-      } else {
-        results[i]._selected = results[i].decision.priority !== 'reject'
-          && results[i].decision.gatePass !== false;
-      }
-      renderBody();
-      updateHeader();
     }
   };
 
@@ -4052,15 +4131,9 @@ function showBatchSubmitResult(results) {
   // 保存 results 到 modal
   modal._results = results;
 
-  // 关闭 / 取消：弹回失败条目到表单方便继续编辑
+  // 关闭 / 取消
   const onClose = () => {
     modal.classList.add('hidden');
-    const firstFail = results.find(r =>
-      r._rejected || r.decision.priority === 'reject' || r.decision.gatePass === false);
-    if (firstFail) {
-      const idx = (state._pendingRecords || []).indexOf(firstFail.rec);
-      if (idx >= 0) selectPendingRecord(idx);
-    }
   };
   document.getElementById('batchClose').onclick = onClose;
   document.getElementById('batchCancel').onclick = onClose;
@@ -4096,37 +4169,22 @@ function showBatchSubmitResult(results) {
 }
 
 // 把批量结果实际写入 state.requirements
+// v46: 全部入库（超DDL的也入库排期，仅标注gatePass供PM参考）
 // results:     要入库的 [{ req, decision, rec }]
 // skippedRecs: 未导入、需要回到队列继续编辑的 rec 数组（undefined=清空队列，老调用方式）
 function saveBatchResults(results, skippedRecs) {
-  // 通过 = 决策优先级非 reject 且 gate 通过；其余都算 failed
-  const passed = results.filter(r => r.decision.priority !== 'reject' && r.decision.gatePass !== false);
-  const failed = results.filter(r => r.decision.priority === 'reject' || r.decision.gatePass === false);
-  // 写入通过的
-  passed.forEach(({ req, decision }) => {
+  // v46: 不再区分通过/打回，全部入库排期
+  results.forEach(({ req, decision }) => {
+    if (!req) return;
     req.priority = decision.priority;
     req.approver = decision.approver;
     req.totalWeeks = decision.totalWeeks;
     req.prioScore = decision.prioScore;
     req.importanceScore = decision.importanceScore;
     req.timeGap = decision.timeGap;
-    req.gatePass = decision.gatePass;
+    req.gatePass = decision.gatePass;   // 保留超DDL标记，供甘特图/导出显示
     req.decisionUpdatedAt = new Date().toISOString();
-    req.status = decision.gatePass ? 'pending' : 'error';
-    state.requirements.push(normalizeReq(req));
-  });
-  // 写入打回的（标 error，PM 可到需求池里改）
-  failed.forEach(({ req, decision }) => {
-    if (!req) return;
-    req.priority = 'reject';
-    req.approver = decision.approver || '—';
-    req.totalWeeks = decision.totalWeeks || 0;
-    req.prioScore = decision.prioScore || 0;
-    req.importanceScore = decision.importanceScore || 0;
-    req.timeGap = decision.timeGap || 0;
-    req.gatePass = decision.gatePass || false;
-    req.decisionUpdatedAt = new Date().toISOString();
-    req.status = 'error';
+    req.status = 'pending';            // v46: 统一 pending，不再标 error
     state.requirements.push(normalizeReq(req));
   });
   saveState();
@@ -4280,7 +4338,7 @@ function renderPool() {
     ${reqs.length ? reqs.map(r => `
       <div class="pool-row${r.overDDL ? ' over-ddl' : ''}" data-req="${r.id}">
         <div class="pool-cell check-cell" onclick="event.stopPropagation()"><input type="checkbox" class="pool-check" data-req="${r.id}" onclick="event.stopPropagation()"></div>
-        <div class="pool-cell"><strong>${r.name}</strong> <span class="name-gen-tag" title="生成规范名称（复制到 TAPD / SG）" onclick="event.stopPropagation(); window._showReqNames('${r.id}')">🏷 取名</span>${r.overDDL ? ` <span class="ddl-warn-tag" title="排期超过 DDL，点击做可选压缩优化（缩缓冲/提前评审），或改 DDL / 拆并行" onclick="event.stopPropagation(); window._optimizeOverDDL('${r.id}')">⚠超DDL</span>` : ''}${r.category === 'lit-system' ? ' <span class="sys-warn-tag" title="系统性世界观概念，需 PM 特别关注">⚠系统概念</span>' : ''}<div class="text-muted text-sm">${r.pipelines?.map(p => getPipeline(p)?.name).filter(Boolean).join(' · ') || ''}</div></div>
+        <div class="pool-cell"><strong>${r.name}</strong> <span class="name-gen-tag" title="生成规范名称（复制到 TAPD / SG）" onclick="event.stopPropagation(); window._showReqNames('${r.id}')">🏷 取名</span>${r.overDDL ? ` <span class="ddl-warn-tag" title="${r.overDDLReason === 'manpower' ? '制作人力不足导致超 DDL（可增人手/拆并行）' : '工期本身超过 DDL（建议改 DDL / 砍量），点击做可选压缩优化'}，点击做可选压缩优化（缩缓冲/提前评审），或改 DDL / 拆并行" onclick="event.stopPropagation(); window._optimizeOverDDL('${r.id}')">⚠超DDL${r.overDDLReason === 'manpower' ? '·人力' : ''}</span>` : ''}${r.category === 'lit-system' ? ' <span class="sys-warn-tag" title="系统性世界观概念，需 PM 特别关注">⚠系统概念</span>' : ''}<div class="text-muted text-sm">${r.pipelines?.map(p => getPipeline(p)?.name).filter(Boolean).join(' · ') || ''}</div></div>
         <div class="pool-cell">${catLabel(r)}</div>
         <div class="pool-cell">${escapeHtml(reqPersonLabel(r))}</div>
         <div class="pool-cell"><span class="prio-badge ${r.priority === 'reject' ? 'reject' : r.priority === 'P0' ? 's' : r.priority === 'P1' ? 'a' : 'b'}">${r.priority === 'reject' ? '打回' : r.priority === 'P0' ? 'S' : r.priority === 'P1' ? 'A' : 'B'}</span></div>
@@ -4350,9 +4408,23 @@ function batchSchedule() {
   // v10: 排期前先收集「多档产出物」节点，弹窗让 PM 选大/中/小；选完再真正排期
   const sizeQuestions = collectSizeQuestions(targets);
   if (sizeQuestions.length) {
-    showSizePickerModal(sizeQuestions, () => _doBatchSchedule(targets));
+    showSizePickerModal(sizeQuestions, () => {
+      // 多模式产出物（如英雄角色卡整组/单角色）弹窗，选完再排
+      const modeQuestions = collectModeQuestions(targets);
+      if (modeQuestions.length) {
+        showModePickerModal(modeQuestions, () => _doBatchSchedule(targets));
+      } else {
+        _doBatchSchedule(targets);
+      }
+    });
   } else {
-    _doBatchSchedule(targets);
+    // 无多档但有模式 → 直接弹模式选择
+    const modeQuestions = collectModeQuestions(targets);
+    if (modeQuestions.length) {
+      showModePickerModal(modeQuestions, () => _doBatchSchedule(targets));
+    } else {
+      _doBatchSchedule(targets);
+    }
   }
 }
 
@@ -4376,6 +4448,30 @@ function collectSizeQuestions(targets) {
         seen.add(key);
         const t = getItemTable()[item];
         qs.push({ reqId: r.id, reqName: r.name, itemName: item, sizes: t.sizes });
+      });
+    });
+  });
+  return qs;
+}
+
+// 收集所有待排需求里「多模式产出物」→ 每个（按需求+产出项）生成一道选择题
+// 返回 [{reqId, reqName, itemName, modes:{整组开发:{...}, 单角色:{...}}}]
+function collectModeQuestions(targets) {
+  const qs = [];
+  const seen = new Set();   // reqId|item 去重
+  targets.forEach(r => {
+    const flow = (state.config.flows || {})[r.category];
+    if (!flow || !flow.nodes) return;
+    const nodes = expandedFlowNodes(r, flow.nodes);
+    nodes.forEach(node => {
+      const items = node.litBundle ? node.litBundle.slice() : (node.item ? [node.item] : []);
+      items.forEach(item => {
+        if (!isMultiModeItem(item)) return;
+        const key = r.id + '|' + item;
+        if (seen.has(key)) return;
+        seen.add(key);
+        const t = getItemTable()[item];
+        qs.push({ reqId: r.id, reqName: r.name, itemName: item, modes: t.modes });
       });
     });
   });
@@ -4407,6 +4503,38 @@ function showSizePickerModal(questions, onConfirm) {
       const size = sel ? sel.value : defaultOf(q.sizes);
       const r = getReq(q.reqId);
       if (r) { if (!r.sizeChoices) r.sizeChoices = {}; r.sizeChoices['item:' + q.itemName] = size; }
+    });
+    saveState();
+    close();
+    onConfirm();
+  };
+}
+
+// 弹窗：逐条列出多模式产出项，PM 选模式（如英雄角色卡整组开发/单角色）；确认后写入 req.modeChoices['item:'+item] 再回调
+function showModePickerModal(questions, onConfirm) {
+  const backdrop = document.getElementById('modePickerModal');
+  const body = document.getElementById('modePickerBody');
+  if (!backdrop || !body) { onConfirm(); return; }   // 兜底：无弹窗则直接排
+  const defaultOf = (modes) => Object.keys(modes)[0];
+  body.innerHTML = questions.map((q, qi) => {
+    const opts = Object.keys(q.modes).map(mode =>
+      `<label class="size-opt"><input type="radio" name="modeq_${qi}" value="${mode}" ${mode===defaultOf(q.modes)?'checked':''}> <b>${mode}</b> · ${q.modes[mode].min === q.modes[mode].max ? q.modes[mode].min : q.modes[mode].min + '-' + q.modes[mode].max}${q.modes[mode].unit}/${q.modes[mode].per}${q.modes[mode].desc ? '（' + q.modes[mode].desc + '）' : ''}</label>`
+    ).join('');
+    return `<div class="size-q" data-qi="${qi}">
+      <div class="size-q-head"><span class="size-q-req">${q.reqName}</span> · ${q.itemName}</div>
+      <div class="size-q-opts">${opts}</div>
+    </div>`;
+  }).join('');
+  backdrop.classList.remove('hidden');
+  const close = () => backdrop.classList.add('hidden');
+  document.getElementById('modePickerClose').onclick = close;
+  document.getElementById('modePickerCancel').onclick = close;
+  document.getElementById('modePickerConfirm').onclick = () => {
+    questions.forEach((q, qi) => {
+      const sel = body.querySelector(`input[name="modeq_${qi}"]:checked`);
+      const mode = sel ? sel.value : defaultOf(q.modes);
+      const r = getReq(q.reqId);
+      if (r) { if (!r.modeChoices) r.modeChoices = {}; r.modeChoices['item:' + q.itemName] = mode; }
     });
     saveState();
     close();
@@ -4485,6 +4613,8 @@ function _doBatchSchedule(targets) {
     state.tasks.push(...tasks);
     r.status = 'running';           // 统一：都进"已排期"，超期仅靠红标区分
     r.overDDL = overDDL;
+    // ⚠️ v44：超 DDL 原因标记 —— 走「人力重组」(passB) 说明是制作人力不足导致；否则是工期本身超
+    r.overDDLReason = overDDL ? (r.manpowerReorg ? 'manpower' : 'duration') : '';
     scheduled.push(r);
     if (overDDL) overDDLReqs.push({ r: r, lastEnd: lastEnd });
     if (r.scheduleTight) tightReqs.push(r);
@@ -5318,6 +5448,72 @@ function _exportBuildHolidaySheet(wb) {
   XLSX.utils.book_append_sheet(wb, ws3, '假期扣除周');
 }
 
+// 子步骤C2：Sheet「人力负荷」——按工种(文学/场景原画/角色原画)统计制作人力占用，
+//   ⚠️ v44 新增：让 PM 在导出表里直接看出「美术/文学」制作人力是否不足。
+//   指标：峰值并发需求数 vs 座位数（>座位=超载），占用率 = 占用人天 / (座位数 × 窗口工作天数)。
+function _exportBuildManpowerSheet(wb, tasks, HC, makeRoleFn) {
+  var POOL = [
+    { key:'lit',      name:'文学创作人' },
+    { key:'sceneArt', name:'场景原画' },
+    { key:'charArt',  name:'角色原画' }
+  ];
+  var sizeOf = { lit: HC.lit!=null?HC.lit:3, sceneArt: HC.sceneArt!=null?HC.sceneArt:2, charArt: HC.charArt!=null?HC.charArt:3 };
+
+  // 只统计制作类节点（make / hr），排除 review/sync/buffer/archive
+  function ymd(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+  function isWorkday(d){ var w=d.getDay(); if(w===0||w===6) return false; if(_isHolidayDay(d)) return false; return true; }
+
+  var agg = {}; // key -> { workdays, peakMap:{}, names:{}, taskCount }
+  POOL.forEach(function(p){ agg[p.key] = { workdays:0, peakMap:{}, names:{}, taskCount:0 }; });
+  var minD=null, maxD=null;
+  tasks.forEach(function(t){
+    if(t.nodeType==='review'||t.nodeType==='sync'||t.nodeType==='buffer'||t.nodeType==='archive') return;
+    var r = (state.requirements.find(function(x){return x.id===t.reqId;})||{});
+    var role = t.litRole ? 'lit' : makeRoleFn(t.nodeName, r.category);
+    if(!agg[role]) return;
+    var days = (t.days||0)*1;
+    agg[role].workdays += days;
+    agg[role].taskCount += 1;
+    if(r.name) agg[role].names[r.name] = 1;
+    // 逐日标占用，算峰值并发
+    if(t.planStart && t.planEnd){
+      var s=new Date(t.planStart), e=new Date(t.planEnd); s.setHours(0,0,0,0); e.setHours(0,0,0,0);
+      for(var d=new Date(s); d<=e; d.setDate(d.getDate()+1)){
+        var k=ymd(d); agg[role].peakMap[k]=(agg[role].peakMap[k]||0)+1;
+        if(!minD||d<minD) minD=new Date(d); if(!maxD||d>maxD) maxD=new Date(d);
+      }
+    }
+  });
+  // 窗口工作天数
+  var windowWorkdays = 0;
+  if(minD && maxD){
+    for(var d=new Date(minD); d<=maxD; d.setDate(d.getDate()+1)){ if(isWorkday(d)) windowWorkdays++; }
+  }
+  // 峰值并发
+  var rows = [['工种','座位数','制作任务数','占用人天','窗口工作天数','理论产能(人天)','占用率','峰值并发需求','是否超载','涉及需求']];
+  POOL.forEach(function(p){
+    var a = agg[p.key];
+    var size = sizeOf[p.key];
+    var peak = 0; Object.keys(a.peakMap).forEach(function(k){ if(a.peakMap[k]>peak) peak=a.peakMap[k]; });
+    var cap = size * windowWorkdays;
+    var rate = cap>0 ? (a.workdays/cap*100) : 0;
+    var overload = peak > size;
+    var names = Object.keys(a.names).join('、') || '—';
+    rows.push([ p.name, size, a.taskCount||0, a.workdays||0, windowWorkdays||0, cap||0,
+      (rate.toFixed(0)+'%'), peak||0, overload ? '⚠ 超载' : '正常', names ]);
+  });
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:8},{wch:10},{wch:10},{wch:12},{wch:14},{wch:8},{wch:14},{wch:10},{wch:40}];
+  for(var c=0;c<10;c++){ var a0=XLSX.utils.encode_cell({r:0,c:c}); if(ws[a0]) ws[a0].s={ fill:{fgColor:{rgb:'1F4E79'}}, font:{color:{rgb:'FFFFFF'},bold:true}, alignment:{horizontal:'center'} }; }
+  // 超载行标红
+  for(var R=1;R<rows.length;R++){
+    if(rows[R][8] && rows[R][8].indexOf('超载')>=0){
+      for(var c=0;c<10;c++){ var ac=XLSX.utils.encode_cell({r:R,c:c}); if(ws[ac]) ws[ac].s={ fill:{fgColor:{rgb:'FEE2E2'}}, font:{color:{rgb:'DC2626'},bold:true} }; }
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, ws, '人力负荷');
+}
+
 // 子步骤D：后处理——注入冻结窗格 + 状态列下拉（xlsx-js-style 不支持，用 fflate 改 XML）
 function _exportInjectFreezeDropdown(wbout, ws, LEFTN) {
   try {
@@ -5496,7 +5692,7 @@ function exportExcelGantt() {
         var isSysLit = (r.category === 'lit-system');
         var sysTag = isSysLit ? ' 🔔PM单独拉起' : '';
         var row = [
-          (r.name||'') + (overDDL ? ' ⚠超DDL' : '') + sysTag,
+          (r.name||'') + (overDDL ? (' ⚠超DDL' + (r.overDDLReason === 'manpower' ? '·人力' : '')) : '') + sysTag,
           pl,
           r.ddl||'',   // 用户要求：直接照搬 DDL
           statusMap[t.status]||t.status||'待开始',
@@ -5712,9 +5908,10 @@ function exportExcelGantt() {
 
     XLSX.utils.book_append_sheet(wb, ws, '排期甘特图');
 
-    // === Sheet 2「优先级&审批」+ Sheet 3「假期扣除周」（详见各函数）===
+    // === Sheet 2「优先级&审批」+ Sheet 3「假期扣除周」+ Sheet 4「人力负荷」（详见各函数）===
     _exportBuildInfoSheet(wb, groupOrder, reqMap, statusMap, calcTier);
     _exportBuildHolidaySheet(wb);
+    _exportBuildManpowerSheet(wb, tasks, HC, makeRole);
 
     // === 生成 xlsx bytes ===
     var wbout = XLSX.write(wb, { bookType:'xlsx', type:'array' });

@@ -662,7 +662,7 @@ V129云梦泽剧情场景概念刷新
                   <option value="char-key">角色类 / 重点NPC</option>
                   <option value="char-normal">角色类 / 普通NPC</option>
                   <option value="lit-simple">纯文学类 / 简单补充设定</option>
-                  <option value="lit-system">纯文学类 / 系统性设定</option>
+                  <option value="lit-system">纯文学类 / 系统文学设定</option>
                 </select>
               </div>
               <div class="field"><label class="field-label">DDL <span class="req">*</span></label>
@@ -931,7 +931,7 @@ V129云梦泽剧情场景概念刷新
 const DEFAULT_CONFIG = {
   // 配置版本号：每次改动内置 flows/holidays 结构就 +1，
   // loadState 会强制用新版覆盖旧缓存里的 flows/holidays（保留用户需求/任务）
-  _cfgVersion: 52,
+  _cfgVersion: 57,
   sceneStoryHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   sceneWorldHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   charKeyHours: { 1: 1.5, 2: 0.5, 3: 0.6, 4: 1.2, 5: 1, 6: 2.4, 7: 1, 8: 0.5 },
@@ -974,7 +974,7 @@ const DEFAULT_CONFIG = {
   // - ownerRule:   worker / reviewer_p0 / reviewer_p1 / reviewer_p2
   // - reviewerRule: 评审时显示的审批人名
   // 修改后「重排已选需求」即可生效；老 task 的 owner 不会自动改
-  // flow 节点若带 item 字段 → 工期 = ITEM_TIME[item] 中位数 × qty(默认1)，并可在导出时标注(x-x天)
+  // flow 节点若带 item 字段 → 工期 = ITEM_TIME[item] 最大值 × qty(默认1)，并可在导出时标注(x-x天)
   // 不带 item 的节点（评审/归档/修改）用固定 days
   flows: {
     'scene-story': {
@@ -983,8 +983,6 @@ const DEFAULT_CONFIG = {
         { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker',     reviewerRule: '' },
         { type: 'review', name: '文学评审',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' },
         { type: 'make',   name: '场景概念方向草图',        item: '概念方向草图', qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '草图评审1',                  days: 1, ownerRule: 'reviewer_p1', reviewerRule: '' },
-        { type: 'make',   name: '草图修改',                 days: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'sync',   name: '周会同步',                 days: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'make',   name: '场景概念图',              item: '概念图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'review', name: '概念图评审2',                days: 1, ownerRule: 'reviewer_p1', reviewerRule: '' },
@@ -999,8 +997,6 @@ const DEFAULT_CONFIG = {
         { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker',     reviewerRule: '' },
         { type: 'review', name: '文学评审',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' },
         { type: 'make',   name: '场景概念方向草图',        item: '概念方向草图', qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '草图评审',                          days: 1, ownerRule: 'reviewer_p1', reviewerRule: '' },
-        { type: 'make',   name: '草图修改',                 days: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'sync',   name: '周会同步',                 days: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'make',   name: '场景概念图',              item: '概念图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'review', name: '概念图评审',                        days: 1, ownerRule: 'reviewer_p1', reviewerRule: '' },
@@ -1042,7 +1038,7 @@ const DEFAULT_CONFIG = {
       ]
     },
     'lit-system': {
-      name: '上报 PM 单独拉起',
+      name: '系统文学设定',
       nodes: [
         { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker',     reviewerRule: '' },
         { type: 'review', name: '评审',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' },
@@ -1239,20 +1235,52 @@ function formatItemTime(t) {
   return `${t.min}~${t.max} ${t.unit}/${t.per}`;
 }
 
-// v10: 工时表联动 —— 取某产出物工时的「中位数」（(min+max)/2；多档 sizes 按选定档位，未选用"中"或首档；modes 按选定模式）
+// 工时表工期「类型」：大中小 / 范围 / 模式 / 空（固定天数节点没有 item）
+function itemTimeKind(itemName) {
+  const t = getItemTable()[itemName];
+  if (!t) return '';
+  if (t.modes) return '模式';
+  if (t.sizes) return '大中小';
+  if (t.min != null) return '范围';
+  return '';
+}
+// 工时表工期「文本」：大中小→"大7/中5"；范围→"3~5"；模式→"整组开发30 / 单角色7"
+function itemTimeText(itemName) {
+  const t = getItemTable()[itemName];
+  if (!t) return '—';
+  if (t.modes) {
+    return Object.entries(t.modes).map(([k, v]) => `${k}${v.min === v.max ? v.min : v.min + '~' + v.max}`).join(' / ');
+  }
+  if (t.sizes) {
+    return Object.entries(t.sizes).map(([k, v]) => `${k}${v}`).join('/');
+  }
+  if (t.min != null) {
+    return t.min === t.max ? `${t.min}` : `${t.min}~${t.max}`;
+  }
+  return '—';
+}
+// 天数徽标配色
+function daysBadgeStyle(kind) {
+  if (kind === '大中小') return 'background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA;';
+  if (kind === '范围')   return 'background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;';
+  if (kind === '模式')   return 'background:#F5F3FF;color:#6D28D9;border:1px solid #DDD6FE;';
+  return 'background:#F3F4F6;color:#374151;border:1px solid #E5E7EB;'; // 固定
+}
+
+// v10: 工时表联动 —— 取某产出物工时的「最大值（范围上限）」（(min,max) 取 max；多档 sizes 按选定档位，未选用"中"或首档；modes 按选定模式的 max）
 function itemMedianDays(itemName, sizeChoice) {
   const t = getItemTable()[itemName];
   if (!t) return 0;
   if (t.modes) {
     const modeName = (sizeChoice && t.modes[sizeChoice]) ? sizeChoice : Object.keys(t.modes)[0];
     const m = t.modes[modeName];
-    return Math.round(((m.min + m.max) / 2) * 10) / 10;
+    return m.max;
   }
   if (t.sizes) {
     if (sizeChoice && t.sizes[sizeChoice] != null) return t.sizes[sizeChoice];
     return t.sizes['中'] != null ? t.sizes['中'] : (Object.values(t.sizes)[0] || 0);
   }
-  return Math.round(((t.min + t.max) / 2) * 10) / 10;   // 保留 1 位小数
+  return t.max;   // 范围类（min/max）取最大值（上限）
 }
 // 判断某产出物是否为「多档」（大/中/小 中含 ≥2 档）→ 排期时需 PM 选档
 function isMultiSizeItem(itemName) {
@@ -1456,7 +1484,7 @@ function itemRangeLabel(itemName) {
   if (t.sizes) { const v = Object.values(t.sizes); return `${Math.min(...v)}-${Math.max(...v)}天`; }
   return t.min === t.max ? `${t.min}天` : `${t.min}-${t.max}天`;
 }
-// 计算 flow 节点的实际工期：litBundle → 各项相加；带 item → 中位数×数量（多档按 sizeChoice）；否则固定 days
+// 计算 flow 节点的实际工期：litBundle → 各项相加；带 item → 最大值×数量（min/max 范围取 max；多档按 sizeChoice）；否则固定 days
 function nodeDays(node, sizeChoice, sizeChoices, modeChoice) {
   if (node.litBundle) return litBundleDays(node, sizeChoices);
   if (node.item && getItemTable()[node.item]) {
@@ -1465,7 +1493,7 @@ function nodeDays(node, sizeChoice, sizeChoices, modeChoice) {
       const modeName = (modeChoice && t.modes[modeChoice]) ? modeChoice : Object.keys(t.modes)[0];
       const m = t.modes[modeName];
       const qty = node.qty != null ? node.qty : 1;
-      return Math.max(1, Math.round(((m.min + m.max) / 2) * qty));
+      return Math.max(1, Math.round(m.max * qty));
     }
     const qty = node.qty != null ? node.qty : 1;
     return Math.max(1, Math.round(itemMedianDays(node.item, sizeChoice) * qty));
@@ -1508,7 +1536,7 @@ const MIDS_WITH_ORDER = new Set(['角色原画', '场景原画']);
 const CATEGORY_TREE = {
   '场景类': { '剧情场景': 'scene-story', '世界观场景': 'scene-world' },
   '角色类': { '重点NPC': 'char-key', 'NPC': 'char-normal' },
-  '纯文学类': { '简单补充设定': 'lit-simple', '系统性设定': 'lit-system' }
+  '纯文学类': { '简单补充设定': 'lit-simple', '系统文学设定': 'lit-system' }
 };
 
 
@@ -1768,13 +1796,13 @@ function runDecisionChain(req) {
 
   // Step 1.5: 文学子分类路由（纯文学类专属规则）
   //   · 简单补充设定(lit-simple) → 走标准纯文学管线
-  //   · 系统性设定(lit-system) → 标记「PM 单独拉起」，影响面大，需 PM 另行评估资源与优先级
+  //   · 系统文学设定(lit-system) → 标记「系统文学设定」，影响面大，需 PM 另行评估资源与优先级
   const isLitSystem = category === 'lit-system';
   if (category === 'lit-simple' || category === 'lit-system') {
-    const litLabel = category === 'lit-system' ? '系统性设定（⚠ PM 需单独拉起）' : '简单补充设定';
+    const litLabel = category === 'lit-system' ? '系统文学设定' : '简单补充设定';
     steps.push({ num: 1.5, title: '文学子分类路由', result: litLabel, pass: true,
       detail: category === 'lit-system'
-        ? '<b>系统性设定</b>：影响面大，可能涉及多环节交叉，请 PM 单独拉起评估资源与优先级。导出 Excel 时将标注「PM单独拉起」。'
+        ? '<b>系统文学设定</b>：影响面大，可能涉及多环节交叉，请 PM 单独拉起评估资源与优先级。导出 Excel 时将标注「系统文学设定」。'
         : '<b>简单补充设定</b>：走标准纯文学管线，按常规流程排期。'
     });
   }
@@ -1812,7 +1840,7 @@ function runDecisionChain(req) {
   steps.push({ num: 3, title: '工期估算', result: `总计 ${totalDays.min === totalDays.max ? totalDays.min : totalDays.min + '~' + totalDays.max} 人天 (≈${totalWeeks.toFixed(1)} 周)`, pass: true, detail: step3Detail });
 
   // Step 4: 可行性判定
-  // ⚠️ v44 修正：旧逻辑只算"制作"人天(totalWeeks)，漏了评审/周会同步节点 + 末尾 PM 缓冲，
+  // ⚠️ v44 修正：旧逻辑只算"制作"人天(totalWeeks)，漏了评审/周会同步节点 + 末尾整体优化，
   //   导致决策链说"可行"但排期引擎(含全部节点+缓冲)却超 DDL，两者对不齐。
   //   现改为与排期引擎一致的工期口径：制作周 + 会议周(评审/同步，每节点1天) + 缓冲周。
   const today = new Date();
@@ -1996,14 +2024,11 @@ function _compactSeatDelayGap(tasks) {
         nd.planEnd = formatDate(desiredEnd);
         anchor = newStart;
       } else if (nd.nodeType === 'review' || nd.nodeType === 'sync') {
-        // 用户规则(2026-07-16)：评审若紧邻在"因等座位被延后的制作"之前，
-        //   优先贴紧到制作前一个工作日（哪怕不是周四），消除"评审卡周四→制作等座位"之间的空档。
-        //   （这是"评审后移贴紧制作"的取舍：连续性优先于周四）
+        // 座位等待导致制作延后时，把前序评审/周会贴紧到制作前（连续性优先），与周四无关
         var curD = new Date(nd.planStart); curD.setHours(0,0,0,0);
         if (desiredEnd <= curD) break;                 // 不往前挪（已贴紧或更早）
         nd.planStart = formatDate(desiredEnd);
         nd.planEnd = formatDate(desiredEnd);
-        nd.offMeeting = true;                          // 标记：此评审未卡周四（被贴紧到制作前）
         anchor = desiredEnd;
       } else {
         break;                                         // buffer/archive 不参与
@@ -2075,19 +2100,17 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
   var bufW = totalW * (bcfg.ratio || 0);
   bufW = Math.max(bcfg.minWeeks || 0, Math.min(bcfg.maxWeeks || 99, bufW));
   var bufDays = bufW > 0 ? Math.max(1, Math.round(bufW * 5)) : 0;
-  // v10: PM 冲突仲裁——首选「缩减 buffer 1 周(5工作日)」，次选「提前评审」
-  //   opts.cutBuffer: 缩减的周数（默认0）；opts.compressReview: 强制压缩评审（不等周四）
+  // v10: PM 冲突仲裁——「缩减整体优化(缩 buffer) 1 周」为可选优化
+  //   opts.cutBuffer: 缩减的周数（默认0）
   var cutWeeks = opts.cutBuffer || 0;
   if (cutWeeks > 0) {
     bufW = Math.max(0, bufW - cutWeeks);
     bufDays = bufW > 0 ? Math.max(1, Math.round(bufW * 5)) : 0;
   }
 
-  // 评审(review) & 周会同步(sync) 都是"需在周四周会上过"的事件：
-  //   - 优先排在下一个可开会周四
-  //   - compress=true（排期紧张时）→ 不等周四，紧跟前置下一个工作日，尽量提前，标记 offMeeting
+  // 评审(review) & 周会同步(sync)：正常排期，紧接前置节点之后下一个工作日
   // 制作/归档：从前置次日的下一个工作日起，持续 N 个工作日（跳周末/假期）
-  function runPass(compress, ignoreSeatWait) {
+  function runPass(ignoreSeatWait) {
     var oLast = Object.assign({}, ownerLastEnd);   // 本趟独立累加器，避免污染
     var pEnd = new Date(today);
     var tasks = [];
@@ -2107,17 +2130,12 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
       var sizeChoice = (node.item && req.sizeChoices) ? (req.sizeChoices['item:' + node.item] || null) : null;
       // 多模式产出物（如英雄角色卡整组/单角色）：PM 选的模式，存在 req.modeChoices['item:'+item]
       var modeChoice = (node.item && req.modeChoices) ? (req.modeChoices['item:' + node.item] || null) : null;
-      var planStart, planEnd, offMeeting = false, nodeSeatDelayed = false;
+      var planStart, planEnd, nodeSeatDelayed = false;
       var afterPrev = new Date(pEnd); afterPrev.setDate(afterPrev.getDate() + 1);
       if (isMeeting) {
+        // 评审/周会同步正常排期，紧接前置节点之后下一个工作日
         var earliest = _nextWorkday(afterPrev);
-        if (compress) {
-          planStart = earliest; offMeeting = true;            // 紧张→提前，不等周四
-        } else {
-          var thu = _nextMeetingThursday(earliest);
-          if (ddlDate && thu > ddlDate) { planStart = earliest; offMeeting = true; }
-          else planStart = thu;
-        }
+        planStart = earliest;
         planEnd = new Date(planStart);                        // 事件 1 天
       } else {
         var _days = nodeDays(node, sizeChoice, req.sizeChoices, modeChoice);
@@ -2136,7 +2154,6 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
         nodeType: node.type,            // make / review / sync / hr / archive
         days: isMeeting ? 1 : nodeDays(node, sizeChoice, req.sizeChoices, modeChoice),
         weeks: (isMeeting ? 1 : nodeDays(node, sizeChoice, req.sizeChoices, modeChoice)) / 7,
-        offMeeting: offMeeting,
         seatDelayed: nodeSeatDelayed,   // 该制作节点因等工种座位而被迫推后（人力瓶颈）
         litRole: !!node.litRole,        // 文学制作节点 → 导出用蓝色
         planStart: formatDate(planStart),
@@ -2160,8 +2177,8 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
     return { tasks: tasks, oLast: oLast, endDate: pEnd };
   }
 
-  // 先按"评审卡周四 + 等本工种座位空出（延后避让）"正常排一趟
-  var passA = runPass(!!opts.compressReview, false);
+  // 先按"正常排期（紧接前置）+ 等本工种座位空出（延后避让）"排一趟
+  var passA = runPass(false);
   var chosen = passA;
   req.scheduleTight = false; req.tightNote = '';
   req.manpowerReorg = false;   // true = 走了"人力重组"（无视座位等待、尽早排）
@@ -2173,7 +2190,7 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
   // 判定：只要 passA 里存在因等座位被推后的节点(seatDelayed) 且 passA 末端 > DDL，就试 passB。
   var passADelayed = passA.tasks.some(function(t){ return t.seatDelayed; });
   if (ddlDate && passADelayed && passA.endDate > ddlDate) {
-    var passB = runPass(!!opts.compressReview, true);   // 人力重组：不等座位，尽早排
+    var passB = runPass(true);   // 人力重组：不等座位，尽早排
     // passB 若能把末端拉回 DDL 内（或至少比 passA 更早），则采用 passB
     if (passB.endDate < passA.endDate) {
       chosen = passB;
@@ -2181,7 +2198,7 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
     }
   }
 
-  // DDL 检查：正常排期是否放得下（含缓冲）。放不下 → 标记 tight，交给批量层弹窗让 PM 选缩 buffer / 提前评审
+  // DDL 检查：正常排期是否放得下（含缓冲）。放不下 → 标记 tight，交给批量层弹窗让 PM 选缩减整体优化(缩缓冲)
   req.tightInfo = null;
   if (ddlDate) {
     var aEnd = chosen.endDate;
@@ -2189,11 +2206,7 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
     var aBufEnd = bufDays > 0 ? _addWorkdays(_nextWorkday(aAfter), bufDays) : new Date(aEnd);
     var overDDL = aEnd > ddlDate;
     var noBuffer = aBufEnd > ddlDate;
-    if (opts.compressReview) {
-      // PM 已选提前评审：标记（导出显示 offMeeting 已生效）
-      req.scheduleTight = true;
-      req.tightNote = '排期不足：PM 选择「提前评审节点」（评审不等周四）';
-    } else if (overDDL || noBuffer) {
+    if (overDDL || noBuffer) {
       // 记录冲突信息，供批量层判断是否要弹窗给 PM 选方案
       req.tightInfo = { overDDL: overDDL, noBuffer: noBuffer, bufW: bufW, planEnd: formatDate(aEnd) };
     }
@@ -2204,7 +2217,7 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
   Object.keys(chosen.oLast).forEach(function(k){ ownerLastEnd[k] = chosen.oLast[k]; });
   prevEnd = chosen.endDate;
 
-  // v10: PM buffer —— 每个需求末尾追加缓冲块（不占人力，仅顺延链末尾）
+  // v10: 整体优化 —— 每个需求末尾追加整体优化块（不占人力，仅顺延链末尾）
   if (bufDays > 0) {
     var bAfter = new Date(prevEnd); bAfter.setDate(bAfter.getDate() + 1);
     var bStart = _nextWorkday(bAfter);
@@ -2213,7 +2226,7 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
       id: uuid(),
       reqId: req.id,
       nodeIdx: 9999,          // 排在所有流程节点之后（展开后节点数不定，用大值兜底）
-      nodeName: 'PM缓冲 (' + bufW.toFixed(1) + '周)',
+      nodeName: '整体优化 (' + bufW.toFixed(1) + '周)',
       nodeType: 'buffer',                  // 甘特/导出会用专属颜色，且不计人力
       days: bufDays,
       weeks: bufW,
@@ -2225,7 +2238,7 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
       ownerId: '',
       reviewer: '',
       pipeline: (req.pipelines || [])[0] || 'default',
-      followup: '缓冲',
+      followup: '整体优化',
       weekNotes: [],
       changes: []
     });
@@ -4157,10 +4170,10 @@ function showBatchSubmitResult(results) {
       const overdueLine = isOverdue && step4Detail
         ? `<div class="text-sm" style="color:#B91C1C;margin-top:2px;font-size:11.5px;">${escapeHtml(step4Detail)}</div>`
         : '';
-      // 系统性世界观概念警报：文学子分类=系统性设定 → 提醒 PM 特别关注
-      const isSysConcept = (r.req && r.req.category === 'lit-system') || rec.subLit === '系统性设定';
+      // 系统文学设定警报：文学子分类=系统文学设定 → 提醒 PM 特别关注
+      const isSysConcept = (r.req && r.req.category === 'lit-system') || rec.subLit === '系统文学设定';
       const sysWarnLine = isSysConcept
-        ? `<div class="text-sm" style="color:#B45309;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:4px 8px;margin-top:4px;">⚠ 此为<b>系统性世界观概念</b>，影响面大，请 PM 特别评估资源与优先级</div>`
+        ? `<div class="text-sm" style="color:#B45309;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:4px 8px;margin-top:4px;">⚠ 此为<b>系统文学设定</b>，影响面大，请 PM 特别评估资源与优先级</div>`
         : '';
       const prioLabel = isRejected
         ? '已打回'
@@ -4326,7 +4339,7 @@ function showDecisionResult(req, decision) {
       <span class="text-muted text-sm">DDL: ${req.ddl}</span>
       <span class="text-muted text-sm">审批人: ${decision.approver}</span>
     </div>
-    ${req.category === 'lit-system' ? `<div style="margin-bottom:12px;padding:10px 12px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;color:#B45309;font-size:12px;">⚠ <b>系统性世界观概念</b>：此需求为系统级设定，影响面大，请 PM 特别评估资源与优先级</div>` : ''}
+    ${req.category === 'lit-system' ? `<div style="margin-bottom:12px;padding:10px 12px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;color:#B45309;font-size:12px;">⚠ <b>系统文学设定</b>：此需求为系统级设定，影响面大，请 PM 特别评估资源与优先级</div>` : ''}
     ${decision.steps.map(s => `
       <div class="decision-step expanded" data-step="${s.num}">
         <div class="decision-step-header">
@@ -4412,7 +4425,7 @@ function renderPool() {
   if (pendingEl) { pendingEl.textContent = pendingCount; pendingEl.style.color = pendingCount > 0 ? '#D97706' : 'var(--text-muted)'; }
   const statusLabel = { pending: '待排期', running: '已排期', done: '已完成', reject: '已打回', error: '异常' };
   const catLabel = r => {
-    const m = { 'scene-story':'场景/剧情', 'scene-world':'场景/世界观', 'char-key':'角色/重点', 'char-normal':'角色/普通', 'lit-simple':'纯文学/简单', 'lit-system':'纯文学/系统概念' };
+    const m = { 'scene-story':'场景/剧情', 'scene-world':'场景/世界观', 'char-key':'角色/重点', 'char-normal':'角色/普通', 'lit-simple':'纯文学/简单', 'lit-system':'纯文学/系统设定' };
     return m[r.category] || r.category || '—';
   };
   // 需求人：优先取 requester（提需人姓名），退回按 ownerId 查人
@@ -4431,7 +4444,7 @@ function renderPool() {
     ${reqs.length ? reqs.map(r => `
       <div class="pool-row${r.overDDL ? ' over-ddl' : ''}" data-req="${r.id}">
         <div class="pool-cell check-cell" onclick="event.stopPropagation()"><input type="checkbox" class="pool-check" data-req="${r.id}" onclick="event.stopPropagation()"></div>
-        <div class="pool-cell"><strong>${r.name}</strong> <span class="name-gen-tag" title="生成规范名称（复制到 TAPD / SG）" onclick="event.stopPropagation(); window._showReqNames('${r.id}')">🏷 取名</span>${r.overDDL ? ` <span class="ddl-warn-tag" title="${r.overDDLReason === 'manpower' ? '制作人力不足导致超 DDL（可增人手/拆并行）' : '工期本身超过 DDL（建议改 DDL / 砍量），点击做可选压缩优化'}，点击做可选压缩优化（缩缓冲/提前评审），或改 DDL / 拆并行" onclick="event.stopPropagation(); window._optimizeOverDDL('${r.id}')">⚠超DDL${r.overDDLReason === 'manpower' ? '·人力' : ''}</span>` : ''}${r.category === 'lit-system' ? ' <span class="sys-warn-tag" title="系统性世界观概念，需 PM 特别关注">⚠系统概念</span>' : ''}<div class="text-muted text-sm">${r.pipelines?.map(p => getPipeline(p)?.name).filter(Boolean).join(' · ') || ''}</div></div>
+        <div class="pool-cell"><strong>${r.name}</strong> <span class="name-gen-tag" title="生成规范名称（复制到 TAPD / SG）" onclick="event.stopPropagation(); window._showReqNames('${r.id}')">🏷 取名</span>${r.overDDL ? ` <span class="ddl-warn-tag" title="${r.overDDLReason === 'manpower' ? '制作人力不足导致超 DDL（可增人手/拆并行）' : '工期本身超过 DDL（建议改 DDL / 砍量），点击做可选压缩优化'}，点击做可选压缩优化（缩缓冲），或改 DDL / 拆并行" onclick="event.stopPropagation(); window._optimizeOverDDL('${r.id}')">⚠超DDL${r.overDDLReason === 'manpower' ? '·人力' : ''}</span>` : ''}${r.category === 'lit-system' ? ' <span class="sys-warn-tag" title="系统文学设定，需 PM 特别关注">⚠系统设定</span>' : ''}<div class="text-muted text-sm">${r.pipelines?.map(p => getPipeline(p)?.name).filter(Boolean).join(' · ') || ''}</div></div>
         <div class="pool-cell">${catLabel(r)}</div>
         <div class="pool-cell">${escapeHtml(reqPersonLabel(r))}</div>
         <div class="pool-cell"><span class="prio-badge ${r.priority === 'reject' ? 'reject' : r.priority === 'P0' ? 's' : r.priority === 'P1' ? 'a' : 'b'}">${r.priority === 'reject' ? '打回' : r.priority === 'P0' ? 'S' : r.priority === 'P1' ? 'A' : 'B'}</span></div>
@@ -4690,10 +4703,8 @@ function _doBatchSchedule(targets) {
     r.gatePass = d.gatePass; r.decisionUpdatedAt = new Date().toISOString();
     // 统一策略（用户拍板）：不管超 DDL 多少、不管哪条入口 —— 一律照常排进去，
     //   超 DDL 的需求标红警示（需求池 + 导出表），不再打回、不再弹强制二选一窗。
-    //   PM 自己看红色决定是否改 DDL / 砍量；压缩（缩缓冲/提前评审）降级为可选优化。
-    const opts = r.tightResolve === 'cutBuffer' ? { cutBuffer: 1 }
-               : r.tightResolve === 'compressReview' ? { compressReview: true }
-               : {};
+    //   PM 自己看红色决定是否改 DDL / 砍量；压缩（缩整体优化）降级为可选优化。
+    const opts = r.tightResolve === 'cutBuffer' ? { cutBuffer: 1 } : {};
     const tasks = autoSchedule(r, d, idx, opts);
     if (!tasks.length) {
       // 唯一真正的失败：流程配置为空（无法排期）
@@ -4752,7 +4763,7 @@ function showBatchScheduleConflicts(conflicts, scheduled, targets) {
   summary.innerHTML = `已顺排 <strong>${scheduled.length}</strong> 个，有 <strong>${conflicts.length}</strong> 个待 PM 处理：`;
   list.innerHTML = conflicts.map((c, i) => {
     if (c.type === 'tight') {
-      // 排期不足 → 给两个方案：首选缩减 buffer 1 周，次选提前评审
+      // 排期不足 → 给方案：缩减整体优化 1 周
       return `
       <div class="conflict-item">
         <div class="conflict-num">${i+1}</div>
@@ -4760,8 +4771,7 @@ function showBatchScheduleConflicts(conflicts, scheduled, targets) {
           <div class="conflict-name">${c.req.name}</div>
           <div class="conflict-reason">⚠ ${c.reason}</div>
           <div class="conflict-actions" style="flex-wrap:wrap;gap:6px;">
-            <button class="btn btn-sm btn-primary" onclick="window._resolveTight('${c.req.id}','cutBuffer')">① 缩减 PM 缓冲 1 周（首选）</button>
-            <button class="btn btn-sm btn-secondary" onclick="window._resolveTight('${c.req.id}','compressReview')">② 提前评审节点（不等周四）</button>
+            <button class="btn btn-sm btn-primary" onclick="window._resolveTight('${c.req.id}','cutBuffer')">① 缩减整体优化 1 周（首选）</button>
             <button class="btn btn-sm btn-ghost" onclick="window._markReject('${c.req.id}')">标为打回</button>
           </div>
         </div>
@@ -4818,13 +4828,13 @@ function _createConflictModal() {
   // PM 选择压缩方案后：记录选择 → 关闭弹窗 → 用同一批重排（该需求会带 tightResolve 生效）
   window._resolveTight = (rid, mode) => {
     const r = getReq(rid); if (!r) return;
-    r.tightResolve = mode;          // 'cutBuffer' | 'compressReview'
+    r.tightResolve = mode;          // 'cutBuffer'
     // 清掉该需求已入库的旧任务（若有），重新纳入待排
     state.tasks = state.tasks.filter(t => t.reqId !== rid);
     r.status = 'pending';
     saveState();
     document.getElementById('conflictModal').classList.add('hidden');
-    const label = mode === 'cutBuffer' ? '缩减 PM 缓冲 1 周' : '提前评审节点';
+    const label = '缩减整体优化 1 周';
     toast(`已对「${r.name}」应用：${label}，正在重排…`, 'info');
     // 用上一批 targets 重排（保持跨需求人力累计一致）
     const targets = (window._lastBatchTargets && window._lastBatchTargets.length)
@@ -4864,14 +4874,14 @@ window._showReqNames = (rid) => {
 window._closeNamesModal = () => { const m = document.getElementById('reqNamesModal'); if (m) m.remove(); };
 window._optimizeOverDDL = (rid) => {
   const r = getReq(rid); if (!r) return;
-  const cur = r.tightResolve === 'cutBuffer' ? '（当前：已缩缓冲）' : r.tightResolve === 'compressReview' ? '（当前：已提前评审）' : '';
+  const cur = r.tightResolve === 'cutBuffer' ? '（当前：已缩缓冲）' : '';
   const pick = prompt(
     `「${r.name}」排期超 DDL，可选压缩优化（非强制，取消=保持现状红标）${cur}\n\n` +
-    `输入 1 = 缩减 PM 缓冲 1 周\n输入 2 = 提前评审节点（不等周四）\n输入 0 = 取消压缩（恢复正常排期）`,
+    `输入 1 = 缩减整体优化 1 周\n输入 0 = 取消压缩（恢复正常排期）`,
     '1'
   );
   if (pick === null) return;
-  const mode = pick.trim() === '1' ? 'cutBuffer' : pick.trim() === '2' ? 'compressReview' : '';
+  const mode = pick.trim() === '1' ? 'cutBuffer' : '';
   r.tightResolve = mode || undefined;
   // 用当前所有已排需求重排（保持人力累计一致），该需求带上 tightResolve
   const targets = state.requirements.filter(x => x.status === 'running' || x.id === rid);
@@ -4879,7 +4889,7 @@ window._optimizeOverDDL = (rid) => {
   state.tasks = state.tasks.filter(t => !batchIds.has(t.reqId));
   targets.forEach(x => { x.status = 'pending'; });
   _doBatchSchedule(targets);
-  const label = mode === 'cutBuffer' ? '缩减 PM 缓冲 1 周' : mode === 'compressReview' ? '提前评审节点' : '取消压缩';
+  const label = mode === 'cutBuffer' ? '缩减整体优化 1 周' : '取消压缩';
   toast(`已对「${r.name}」应用：${label}`, 'success');
 };
 document.getElementById('btnBatchDelete').onclick = () => {
@@ -4938,7 +4948,7 @@ function renderSettings() {
     <div class="settings-section">
       <div class="settings-section-header" id="itemTimeHeader" style="cursor:pointer;user-select:none;">
         <span id="itemTimeArrow" style="display:inline-block;transition:transform .15s;">▸</span>
-        ⏱ 制作工时表 <span class="text-muted text-sm">排期工期真实依据 · 取中位数×数量 · 可编辑 · 点击展开</span>
+        ⏱ 制作工时表 <span class="text-muted text-sm">排期工期真实依据 · 范围类取最大值(上限)×数量 · 可编辑 · 点击展开</span>
       </div>
       <div class="settings-body" id="itemTimeBody" style="display:none;">
         <div class="settings-row" style="font-weight:600;background:var(--bg-panel);display:grid;grid-template-columns:1.6fr 80px 80px 60px;gap:6px;"><div>产出物</div><div>最少(天)</div><div>最多(天)</div><div>单位</div></div>
@@ -4954,7 +4964,7 @@ function renderSettings() {
             + '<input class="settings-input" type="number" step="0.5" min="0" value="'+mx+'" data-item="'+name+'" data-ikey="max">'
             + '<div class="text-muted text-sm">/'+t.per+'</div></div>';
         }).join('')}
-        <div class="text-muted text-sm" style="padding:6px 0 0 0;">改完点顶部「💾 保存设置」生效（工期=中位数×数量）。「↺ 恢复默认」把全部设置按《合理工时》表重置。</div>
+        <div class="text-muted text-sm" style="padding:6px 0 0 0;">改完点顶部「💾 保存设置」生效（范围类工期=最大值×数量）。「↺ 恢复默认」把全部设置按《合理工时》表重置。</div>
       </div>
     </div>
 
@@ -5077,15 +5087,25 @@ function renderFlowsEditor() {
           <span style="flex:1;"></span>
         </div>
         <div class="flow-card-body" style="display:none;padding:0 12px 12px;">
-          <div class="flow-node-row flow-node-head" style="display:grid;grid-template-columns:30px 1.4fr 80px 70px 1.2fr 1.6fr 30px;gap:6px;align-items:center;padding:4px 0;color:var(--text-muted);font-size:11px;">
-            <div>#</div><div>节点名</div><div>类型</div><div>天数</div><div>ownerRule</div><div>审批人 (reviewerRule)</div><div></div>
+          <div class="flow-node-row flow-node-head" style="display:grid;grid-template-columns:30px 1.4fr 70px 135px 1.1fr 1.5fr 30px;gap:6px;align-items:center;padding:4px 0;color:var(--text-muted);font-size:11px;">
+            <div>#</div><div>节点名</div><div>类型</div><div>天数（工时类型）</div><div>ownerRule</div><div>审批人 (reviewerRule)</div><div></div>
           </div>
           ${(f.nodes || []).map((n, ni) => `
-            <div class="flow-node-row" data-flow="${fid}" data-ni="${ni}" style="display:grid;grid-template-columns:30px 1.4fr 80px 70px 1.2fr 1.6fr 30px;gap:6px;align-items:center;padding:3px 0;">
+            <div class="flow-node-row" data-flow="${fid}" data-ni="${ni}" style="display:grid;grid-template-columns:30px 1.4fr 70px 135px 1.1fr 1.5fr 30px;gap:6px;align-items:center;padding:3px 0;">
               <div class="text-muted text-sm">${ni + 1}</div>
               <input class="settings-input" data-flow-key="name" value="${(n.name||'').replace(/"/g,'&quot;')}" style="width:100%;">
               <select class="settings-input" data-flow-key="type">${TYPE_OPTS.map(([v,l]) => `<option value="${v}" ${n.type===v?'selected':''}>${l}</option>`).join('')}</select>
-              <input class="settings-input" data-flow-key="days" type="number" min="0" step="1" value="${nodeDays(n)}" ${n.item?'title="工时表联动：'+n.item+' 中位数×数量，改工时表生效" readonly style="width:100%;background:#F5F5F5;"':'style="width:100%;"'}>
+              ${n.item ? `
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                  <span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;width:fit-content;${daysBadgeStyle(itemTimeKind(n.item))}">${itemTimeKind(n.item)}</span>
+                  <span style="font-size:11px;color:var(--text-muted);">${itemTimeText(n.item)}${n.qty && n.qty !== 1 ? ' ×'+n.qty : ''}</span>
+                </div>
+              ` : `
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('固定')}">固定</span>
+                  <input class="settings-input" data-flow-key="days" type="number" min="0" step="1" value="${nodeDays(n)}" style="width:46px;">
+                </div>
+              `}
               <select class="settings-input" data-flow-key="ownerRule">${OWNER_OPTS.map(([v,l]) => `<option value="${v}" ${n.ownerRule===v?'selected':''}>${l}</option>`).join('')}</select>
               <input class="settings-input" data-flow-key="reviewerRule" value="${(n.reviewerRule||'').replace(/"/g,'&quot;')}" style="width:100%;">
               <button class="btn btn-ghost btn-sm" data-flow-act="del" title="删除节点" style="color:#EF4444;">×</button>
@@ -5093,7 +5113,7 @@ function renderFlowsEditor() {
           `).join('')}
           <div style="margin-top:8px;">
             <button class="btn btn-secondary btn-sm" data-flow-act="add">+ 添加节点</button>
-            <span class="text-muted text-sm" style="margin-left:8px;">💡 评审节点固定 1 天；带工时表联动的制作节点（灰底只读）= 内置工时表中位数×数量，工时表已按你的《需求应用与露出》表录入</span>
+            <span class="text-muted text-sm" style="margin-left:8px;">💡 评审节点固定 1 天；带工时表联动的制作节点按工时类型区分：<span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('大中小')}">大中小</span> 弹窗选档 · <span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('范围')}">范围</span> 区间随机 · <span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('模式')}">模式</span> 整组/单角色；灰徽<span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('固定')}">固定</span> 为写死天数（如周会同步、概念图修改）。天数与代码 DEFAULT_ITEM_TIME 一致。</span>
           </div>
         </div>
       </div>
@@ -5419,10 +5439,6 @@ function _latestStartDate(tasks, ddlStr){
   var d = _subWorkdays(new Date(ddlStr), totalWorkdays);
   return formatDate(d);
 }
-// 从 fromDate（含）起第一个「可开周会的周四」（周四且非假期周）
-function _nextMeetingThursday(fromDate){ var x=new Date(fromDate); x.setHours(0,0,0,0); var guard=0; while(guard++<400){ if(x.getDay()===4 && _isWorkday(x)) return new Date(x); x.setDate(x.getDate()+1); } return new Date(fromDate); }
-// 从 toDate（含）起「往前」找第一个可开周会的周四（用于文学阶段回填对齐场景开工）
-function _prevMeetingThursday(toDate){ var x=new Date(toDate); x.setHours(0,0,0,0); var guard=0; while(guard++<400){ if(x.getDay()===4 && _isWorkday(x)) return new Date(x); x.setDate(x.getDate()-1); } return new Date(toDate); }
 
 // 导出前重跑决策链 + 重排（保证 Excel 反映最新 flows / 假期 / 优先级）
 function rescheduleAllForExport() {
@@ -5444,9 +5460,7 @@ function rescheduleAllForExport() {
     r.prioScore=d.prioScore; r.importanceScore=d.importanceScore; r.timeGap=d.timeGap;
     r.gatePass=d.gatePass; r.decisionUpdatedAt=new Date().toISOString();
     // 允许超 DDL 也照常排（导出时标红提示），不再因 gatePass=false 直接丢弃
-    var opts = r.tightResolve === 'cutBuffer' ? { cutBuffer: 1 }
-             : r.tightResolve === 'compressReview' ? { compressReview: true }
-             : {};
+    var opts = r.tightResolve === 'cutBuffer' ? { cutBuffer: 1 } : {};
     var tasks = autoSchedule(r, d, idx, opts);
     if(tasks.length){ state.tasks.push.apply(state.tasks, tasks); r.status='running'; }
   });
@@ -5502,13 +5516,13 @@ function _exportComputeCapacity(makeTaskRows, groupOrder, reqMap, POOL) {
 
 // 子步骤B：Sheet2「优先级&审批」
 function _exportBuildInfoSheet(wb, groupOrder, reqMap, statusMap, calcTier) {
-  var infoRows = [['需求名称','分类','管线','排期档位','优先分','审批人','重要分','DDL','状态','PM单独拉起']];
+  var infoRows = [['需求名称','分类','管线','排期档位','优先分','审批人','重要分','DDL','状态','系统文学设定']];
   groupOrder.forEach(function(rid){
     var r = reqMap[rid]||{};
     infoRows.push([ r.name||'', r.category||'', (r.pipelines||[]).join(', '),
       calcTier(r.prioScore), r.prioScore!=null?r.prioScore:'', r.approver||'',
       r.importanceScore!=null?r.importanceScore:'', r.ddl||'', statusMap[r.status]||r.status||'',
-      r.category === 'lit-system' ? '是（系统性设定，需 PM 另行评估）' : '' ]);
+      r.category === 'lit-system' ? '是（系统文学设定，需 PM 另行评估）' : '' ]);
   });
   var ws2 = XLSX.utils.aoa_to_sheet(infoRows);
   ws2['!cols'] = [{wch:22},{wch:12},{wch:18},{wch:8},{wch:6},{wch:14},{wch:6},{wch:12},{wch:8},{wch:20}];
@@ -5519,7 +5533,7 @@ function _exportBuildInfoSheet(wb, groupOrder, reqMap, statusMap, calcTier) {
     else if(tv==='B') ws2[addr].s={ fill:{fgColor:{rgb:'F3F4F6'}}, font:{color:{rgb:'6B7280'}}, alignment:{horizontal:'center'} };
   }
   for(var c=0;c<10;c++){ var a=XLSX.utils.encode_cell({r:0,c:c}); if(ws2[a]) ws2[a].s={ fill:{fgColor:{rgb:'1F4E79'}}, font:{color:{rgb:'FFFFFF'},bold:true}, alignment:{horizontal:'center'} }; }
-  // 「PM单独拉起」列数据行标黄底橙字，醒目提示
+  // 「系统文学设定」列数据行标黄底橙字，醒目提示
   for(var R=1;R<infoRows.length;R++){
     var a9 = XLSX.utils.encode_cell({r:R,c:9});
     if(ws2[a9] && ws2[a9].v){
@@ -5695,7 +5709,7 @@ function exportExcelGantt() {
     maxD = new Date(maxD); maxD.setHours(0,0,0,0);
     maxD.setDate(maxD.getDate() + 7); // 末尾留 1 周缓冲
     var WK_CN = ['日','一','二','三','四','五','六'];
-    var dayCols = []; // {date, mmdd, ym, dow, weekend, holiday, holidayName, isThu}
+    var dayCols = []; // {date, mmdd, ym, dow, weekend, holiday, holidayName}
     var curD = new Date(minD);
     while(curD <= maxD){
       var dd = new Date(curD);
@@ -5708,8 +5722,7 @@ function exportExcelGantt() {
         dow: WK_CN[dd.getDay()],
         weekend: isWknd,
         holiday: isHol,
-        holidayName: isHol ? getHolidayName(dd.getFullYear(), getISOWeek(dd)) : '',
-        isThu: dd.getDay()===4
+        holidayName: isHol ? getHolidayName(dd.getFullYear(), getISOWeek(dd)) : ''
       });
       curD.setDate(curD.getDate()+1);
     }
@@ -5774,7 +5787,7 @@ function exportExcelGantt() {
         if(isReview){
           ownerName = t.reviewer||''; // 评审人已确定
         } else if(isBuffer){
-          ownerName = 'PM（缓冲）'; // 缓冲不占人力，无需分配制作人
+          ownerName = '整体优化'; // 整体优化不占人力，无需分配制作人
         } else if(isSync){
           ownerName = '全体（周会同步）'; // 周会同步：全组周会，不占单人产能
         } else {
@@ -5783,7 +5796,7 @@ function exportExcelGantt() {
           ownerName = POOL[ownerRole].name;
         }
         var isSysLit = (r.category === 'lit-system');
-        var sysTag = isSysLit ? ' 🔔PM单独拉起' : '';
+        var sysTag = isSysLit ? ' 🔔系统文学设定' : '';
         var row = [
           (r.name||'') + (overDDL ? (' ⚠超DDL' + (r.overDDLReason === 'manpower' ? '·人力' : '')) : '') + sysTag,
           pl,
@@ -5811,12 +5824,11 @@ function exportExcelGantt() {
       make:    { fill:'B2DFDB', font:'00695C' }, // 制作 青
       hr:      { fill:'FFE0B2', font:'E65100' }, // 人力 橙
       lit:     { fill:'C5CAE9', font:'283593' }, // 文学 蓝紫
-      buffer:  { fill:'FFF3C4', font:'8A6D00' }, // PM缓冲 淡黄（斜纹感）
+      buffer:  { fill:'FFF3C4', font:'8A6D00' }, // 整体优化 淡黄（斜纹感）
       holiday: { fill:'D9D9D9' },                 // 假期 灰
       weekend: { fill:'EFEFEF' },                 // 周末 浅灰
       headL:   { fill:'1F4E79', font:'FFFFFF' },  // 左侧表头 深蓝
       headM:   { fill:'2E75B6', font:'FFFFFF' },  // 月份表头
-      headThu: { fill:'D6C36B', font:'4A3B00' },  // 周四表头（周会日）高亮
       headD:   { fill:'DEEBF7', font:'1F4E79' }   // 日期表头
     };
     function setCell(r, c, v, style){
@@ -5832,7 +5844,7 @@ function exportExcelGantt() {
     for(var c=0;c<LEFTN;c++){
       setCell(0,c,LEFT[c],{ fill:{fgColor:{rgb:COLOR.headL.fill}}, font:{color:{rgb:COLOR.headL.font},bold:true}, alignment:{horizontal:'center',vertical:'center'}, border:border });
     }
-    // 月份 + 日期表头（日轴：每天一列；周末/假期灰，周四高亮）
+    // 月份 + 日期表头（日轴：每天一列；周末/假期灰）
     for(var c=LEFTN;c<totalCols;c++){
       var w = dayCols[c-LEFTN];
       var headFill = w.holiday?COLOR.holiday.fill : (w.weekend?COLOR.weekend.fill : COLOR.headM.fill);
@@ -5841,7 +5853,6 @@ function exportExcelGantt() {
       var dLabel, dFill, dFont;
       if(w.holiday){ dLabel=(w.holidayName||'假期')+'\n'+w.mmdd; dFill=COLOR.holiday.fill; dFont='808080'; }
       else if(w.weekend){ dLabel=w.mmdd+'\n周'+w.dow; dFill=COLOR.weekend.fill; dFont='808080'; }
-      else if(w.isThu){ dLabel=w.mmdd+'\n周四·会'; dFill=COLOR.headThu.fill; dFont=COLOR.headThu.font; }
       else { dLabel=w.mmdd+'\n周'+w.dow; dFill=COLOR.headD.fill; dFont=COLOR.headD.font; }
       setCell(1,c, dLabel, { fill:{fgColor:{rgb: dFill}}, font:{color:{rgb: dFont},bold:true,sz:8}, alignment:{horizontal:'center',vertical:'center',wrapText:true}, border:border });
     }
@@ -5858,7 +5869,7 @@ function exportExcelGantt() {
       var r = reqMap[rid]||{};
       nodes.forEach(function(t){
         // 颜色严格按节点性质，不做关键字猜测：
-        //   评审(review) → 红(粉红) ; 周会同步(sync) → 紫 ; 缓冲(buffer) → 黄 ;
+        //   评审(review) → 红(粉红) ; 周会同步(sync) → 紫 ; 整体优化(buffer) → 黄 ;
         //   制作(make/hr/archive)：文学制作 → 蓝(lit) ; 美术制作(场景/角色原画) → 蓝绿(make)
         var color;
         if (t.nodeType === 'review') color = COLOR.review;
@@ -5877,14 +5888,14 @@ function exportExcelGantt() {
           var key = formatDate(d);
           var ci = dateColIdx[key];
           if(ci != null){
-            // 评审固定在单日（周四），其余节点跨天；周末/假期列不铺任务色（视觉上任务自然断开）
+            // 评审/周会同步为单日事件，其余节点跨天；周末/假期列不铺任务色（视觉上任务自然断开）
             var isBlankDay = dayCols[ci].weekend || dayCols[ci].holiday;
             if(!isBlankDay){
               var c = LEFTN + ci;
-              var label = firstPainted ? ((t.nodeName||'') + (t.offMeeting?' ⚠未卡周会':'')) : '';
+              var label = firstPainted ? (t.nodeName||'') : '';
               setCell(globalRow, c, label, {
                 fill:{fgColor:{rgb:color.fill}},
-                font:{color:{rgb: t.offMeeting?'C62828':(color.font||'333333')},sz:9},
+                font:{color:{rgb: color.font||'333333'},sz:9},
                 alignment:{horizontal:'left',vertical:'center'},
                 border:border
               });

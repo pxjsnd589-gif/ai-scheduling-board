@@ -4237,7 +4237,7 @@ function showBatchSubmitResult(results) {
       // 系统文学设定警报：文学子分类=系统文学设定 → 提醒 PM 特别关注
       const isSysConcept = (r.req && r.req.category === 'lit-system') || rec.subLit === '系统性设定';
       const sysWarnLine = isSysConcept
-        ? `<div class="text-sm" style="color:#B45309;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:4px 8px;margin-top:4px;">⚠ 此为<b>系统文学设定</b>，请 PM 单独排期</div>`
+        ? `<div class="text-sm" style="color:#B45309;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:4px 8px;margin-top:4px;">⚠ 此为<b>系统概念设定</b>，请 PM 单独排期</div>`
         : '';
       const prioLabel = isRejected
         ? '已打回'
@@ -4403,7 +4403,7 @@ function showDecisionResult(req, decision) {
       <span class="text-muted text-sm">DDL: ${req.ddl}</span>
       <span class="text-muted text-sm">审批人: ${decision.approver}</span>
     </div>
-    ${req.category === 'lit-system' ? `<div style="margin-bottom:12px;padding:10px 12px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;color:#B45309;font-size:12px;">⚠ <b>系统文学设定</b>：请 PM 单独排期</div>` : ''}
+    ${req.category === 'lit-system' ? `<div style="margin-bottom:12px;padding:10px 12px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;color:#B45309;font-size:12px;">⚠ <b>系统概念设定</b>：请 PM 单独排期</div>` : ''}
     ${decision.steps.map(s => `
       <div class="decision-step expanded" data-step="${s.num}">
         <div class="decision-step-header">
@@ -4508,7 +4508,7 @@ function renderPool() {
     ${reqs.length ? reqs.map(r => `
       <div class="pool-row${r.overDDL ? ' over-ddl' : ''}" data-req="${r.id}">
         <div class="pool-cell check-cell" onclick="event.stopPropagation()"><input type="checkbox" class="pool-check" data-req="${r.id}" onclick="event.stopPropagation()"></div>
-        <div class="pool-cell"><strong>${r.name}</strong> <span class="name-gen-tag" title="生成规范名称（复制到 TAPD / SG）" onclick="event.stopPropagation(); window._showReqNames('${r.id}')">🏷 取名</span>${r.overDDL ? ` <span class="ddl-warn-tag" title="${r.overDDLReason === 'manpower' ? '制作人力不足导致超 DDL（可增人手/拆并行）' : '工期本身超过 DDL（建议改 DDL / 砍量），点击做可选压缩优化'}，点击做可选压缩优化（缩缓冲），或改 DDL / 拆并行" onclick="event.stopPropagation(); window._optimizeOverDDL('${r.id}')">⚠超DDL${r.overDDLReason === 'manpower' ? '·人力' : ''}</span>` : ''}${r.category === 'lit-system' ? ' <span class="sys-warn-tag" title="请 PM 单独排期">⚠系统设定，建议单独排期</span>' : ''}<div class="text-muted text-sm">${r.pipelines?.map(p => getPipeline(p)?.name).filter(Boolean).join(' · ') || ''}</div></div>
+        <div class="pool-cell"><strong>${r.name}</strong> <span class="name-gen-tag" title="生成规范名称（复制到 TAPD / SG）" onclick="event.stopPropagation(); window._showReqNames('${r.id}')">🏷 取名</span>${r.overDDL ? ` <span class="ddl-warn-tag" title="${r.overDDLReason === 'manpower' ? '制作人力不足导致超 DDL（可增人手/拆并行）' : '工期本身超过 DDL（建议改 DDL / 砍量），点击做可选压缩优化'}，点击做可选压缩优化（缩缓冲），或改 DDL / 拆并行" onclick="event.stopPropagation(); window._optimizeOverDDL('${r.id}')">⚠超DDL${r.overDDLReason === 'manpower' ? '·人力' : ''}</span>` : ''}${r.category === 'lit-system' ? ' <span class="sys-warn-tag" title="请 PM 单独排期">⚠系统概念设定，建议单独排期</span>' : ''}<div class="text-muted text-sm">${r.pipelines?.map(p => getPipeline(p)?.name).filter(Boolean).join(' · ') || ''}</div></div>
         <div class="pool-cell">${catLabel(r)}</div>
         <div class="pool-cell">${escapeHtml(reqPersonLabel(r))}</div>
         <div class="pool-cell"><span class="prio-badge ${r.priority === 'reject' ? 'reject' : r.priority === 'P0' ? 's' : r.priority === 'P1' ? 'a' : 'b'}">${r.priority === 'reject' ? '打回' : r.priority === 'P0' ? 'S' : r.priority === 'P1' ? 'A' : 'B'}</span></div>
@@ -6028,7 +6028,7 @@ function exportExcelGantt() {
           var _r = reqMap[makeRowSet[R].reqId];
           if(_r && _r.category === 'lit-system'){
             // 系统文学设定：在「人力不足 / 已顺延」同列标注，提示 PM 单独拉起排期（mentor 要求）
-            ws[addr] = { t:'s', v: '系统设定，建议单独排期' };
+            ws[addr] = { t:'s', v: '系统概念设定，建议单独排期' };
             st.font = {color:{rgb:'B45309'},sz:10,bold:true};
             st.fill = {fgColor:{rgb:'FEF3C7'}};
           } else if(overCapRows[R]){

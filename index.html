@@ -931,7 +931,7 @@ V129云梦泽剧情场景概念刷新
 const DEFAULT_CONFIG = {
   // 配置版本号：每次改动内置 flows/holidays 结构就 +1，
   // loadState 会强制用新版覆盖旧缓存里的 flows/holidays（保留用户需求/任务）
-  _cfgVersion: 57,
+  _cfgVersion: 62,
   sceneStoryHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   sceneWorldHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   charKeyHours: { 1: 1.5, 2: 0.5, 3: 0.6, 4: 1.2, 5: 1, 6: 2.4, 7: 1, 8: 0.5 },
@@ -983,12 +983,10 @@ const DEFAULT_CONFIG = {
         { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker',     reviewerRule: '' },
         { type: 'review', name: '文学评审',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' },
         { type: 'make',   name: '场景概念方向草图',        item: '概念方向草图', qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'sync',   name: '周会同步',                 days: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'make',   name: '场景概念图',              item: '概念图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'review', name: '概念图评审2',                days: 1, ownerRule: 'reviewer_p1', reviewerRule: '' },
-        { type: 'make',   name: '概念图修改',               days: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'sync',   name: '周会同步',                 days: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'make',   name: '物件拆分与设计细化（发包）', item: '设定与拆分图', qty: 1, ownerRule: 'worker',   reviewerRule: '' }
+        { type: 'make',   name: '设定与拆分图',            item: '设定与拆分图', qty: 1, ownerRule: 'worker',     reviewerRule: '' },
+        { type: 'make',   name: '发包资料整理',            days: 3,            qty: 1, ownerRule: 'worker',     reviewerRule: '' }
       ]
     },
     'scene-world': {
@@ -997,11 +995,8 @@ const DEFAULT_CONFIG = {
         { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker',     reviewerRule: '' },
         { type: 'review', name: '文学评审',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' },
         { type: 'make',   name: '场景概念方向草图',        item: '概念方向草图', qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'sync',   name: '周会同步',                 days: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'make',   name: '场景概念图',              item: '概念图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '概念图评审',                        days: 1, ownerRule: 'reviewer_p1', reviewerRule: '' },
-        { type: 'make',   name: '概念图修改',               days: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'sync',   name: '周会同步',                 days: 1, ownerRule: 'worker',     reviewerRule: '' }
+        { type: 'review', name: '概念图评审',                        days: 1, ownerRule: 'reviewer_p1', reviewerRule: '' }
       ]
     },
     'char-key': {
@@ -1011,8 +1006,6 @@ const DEFAULT_CONFIG = {
         { type: 'review', name: '文学评审',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' },
         { type: 'make',   name: '印象图',                  item: '印象图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'review', name: '印象图评估',                                  days: 1, ownerRule: 'reviewer_p2', reviewerRule: '' },
-        { type: 'make',   name: '印象图修改',               days: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'sync',   name: '周会同步',                 days: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'make',   name: '设定图',                  item: '设定图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'make',   name: '三视图',                  item: '三视图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
         { type: 'review', name: '终评',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' }
@@ -1024,25 +1017,21 @@ const DEFAULT_CONFIG = {
         { type: 'make',   name: '角色卡文学设定',          item: '角色卡文学设定', qty: 1, litRole: true, ownerRule: 'worker',    reviewerRule: '' },
         { type: 'review', name: '文学评审',                     days: 1, ownerRule: 'reviewer_p1', reviewerRule: '' },
         { type: 'make',   name: '印象图',                  item: '印象图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '印象图评估',                                  days: 1, ownerRule: 'reviewer_p2', reviewerRule: '' },
-        { type: 'make',   name: '印象图修改',               days: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'sync',   name: '周会同步',                 days: 1, ownerRule: 'worker',     reviewerRule: '' }
+        { type: 'review', name: '印象图评估',                                  days: 1, ownerRule: 'reviewer_p2', reviewerRule: '' }
       ]
     },
     'lit-simple': {
       name: '简单补充设定',
       nodes: [
         { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '评审',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' },
-        { type: 'make',   name: '修改',                                      days: 1, ownerRule: 'worker',     reviewerRule: '' }
+        { type: 'review', name: '评审',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' }
       ]
     },
     'lit-system': {
       name: '系统文学设定',
       nodes: [
         { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '评审',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' },
-        { type: 'make',   name: '修改',                                      days: 1, ownerRule: 'worker',     reviewerRule: '' }
+        { type: 'review', name: '评审',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' }
       ]
     }
   },
@@ -2108,16 +2097,26 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
     bufDays = bufW > 0 ? Math.max(1, Math.round(bufW * 5)) : 0;
   }
 
-  // 评审(review) & 周会同步(sync)：正常排期，紧接前置节点之后下一个工作日
-  // 制作/归档：从前置次日的下一个工作日起，持续 N 个工作日（跳周末/假期）
+  // ⚠️ v59 排期语义重大修正（用户规则）：
+  //   原逻辑：所有节点【串行】——评审/修改/发包 都排在制作环节「结束之后」下一个工作日。
+  //   新逻辑：评审/修改/发包 改为【尾部重叠】——嵌入前一个制作环节的尾部，与制作并发：
+  //     · review（评审）：嵌入前一个制作环节的 倒数第2天（day N-1），与制作同时发生
+  //     · 修改类 make（节点名含「修改」）：嵌入前一个制作环节的 最后1天（day N）
+  //     · 发包类 make（节点名含「发包」）：嵌入前一个制作环节的 最后3天（紧贴制作倒数3天）
+  //   以上三类【不额外延长总工期】、【不占制作产能】（与制作并发，不等待座位、不更新座位占用）。
+  //   普通 make / sync（周会同步）：仍【串行】——紧接前置节点之后下一个工作日，且更新 lastProd 供后续嵌入。
   function runPass(ignoreSeatWait) {
     var oLast = Object.assign({}, ownerLastEnd);   // 本趟独立累加器，避免污染
     var pEnd = new Date(today);
     var tasks = [];
     var seatCache = {};   // 本需求内：同工种复用同一座位（role → seatId）
     var nodes = expandedFlowNodes(req, flow.nodes);   // 文学环节按管线动态展开
+    var lastProd = null;  // 最近一个「普通制作环节」{start,end,days}，供 review/修改/发包 嵌入其尾部
     nodes.forEach(function(node, idx){
       var isMeeting = (node.type === 'review' || node.type === 'sync');
+      var isModify = (node.type === 'make' && /修改/.test(node.name || ''));
+      var isOutsource = (node.type === 'make' && /发包/.test(node.name || ''));
+      var isEmbedded = (node.type === 'review') || isModify || isOutsource;
       // 制作类节点(worker)：按工种座位池挑最空闲座位；评审等非 worker 节点用评审人
       var ownerId;
       if (node.ownerRule === 'worker') {
@@ -2130,21 +2129,47 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
       var sizeChoice = (node.item && req.sizeChoices) ? (req.sizeChoices['item:' + node.item] || null) : null;
       // 多模式产出物（如英雄角色卡整组/单角色）：PM 选的模式，存在 req.modeChoices['item:'+item]
       var modeChoice = (node.item && req.modeChoices) ? (req.modeChoices['item:' + node.item] || null) : null;
-      var planStart, planEnd, nodeSeatDelayed = false;
-      var afterPrev = new Date(pEnd); afterPrev.setDate(afterPrev.getDate() + 1);
-      if (isMeeting) {
-        // 评审/周会同步正常排期，紧接前置节点之后下一个工作日
-        var earliest = _nextWorkday(afterPrev);
-        planStart = earliest;
-        planEnd = new Date(planStart);                        // 事件 1 天
+      var planStart, planEnd, nodeSeatDelayed = false, embedDays = 0;
+      if (isEmbedded && lastProd) {
+        // ⚠️ 尾部重叠：嵌入前一个制作环节的尾部，与制作并发（不等待座位、不更新 pEnd/lastProd/座位占用）
+        var S = new Date(lastProd.start), E = new Date(lastProd.end), N = lastProd.days;
+        if (node.type === 'review') {
+          var rDay = Math.max(1, N - 1);                 // 倒数第2天（N>=2）；N=1时同1天
+          planStart = _addWorkdays(S, rDay);            // 第 rDay 个工作日（含 S 当天为第1个）
+          planEnd = new Date(planStart);
+          embedDays = 1;
+        } else if (isModify) {
+          planStart = new Date(E);                       // 最后1天（第 N 个工作日）
+          planEnd = new Date(E);
+          embedDays = 1;
+        } else { // isOutsource：发包，紧贴制作倒数3天（第 N-2 / N-1 / N 个工作日）
+          var oDays = Math.min(3, N);
+          planStart = _addWorkdays(S, N - oDays + 1);   // 倒数第 oDays 天的起点（含 S 当天为第1个）
+          planEnd = new Date(E);
+          embedDays = oDays;
+        }
       } else {
-        var _days = nodeDays(node, sizeChoice, req.sizeChoices, modeChoice);
-        var ownerBusy = oLast[ownerId] ? new Date(oLast[ownerId]) : null;
-        var cur = _nextWorkday(afterPrev);
-        // ignoreSeatWait=true（人力重组模式）：不等座位空出，尽早排（会与他人并发→标人力不足）
-        if (!ignoreSeatWait && ownerBusy) { var ab = new Date(ownerBusy); ab.setDate(ab.getDate()+1); ab = _nextWorkday(ab); if (ab > cur) { cur = ab; nodeSeatDelayed = true; } }
-        planStart = cur;
-        planEnd = _addWorkdays(planStart, _days);
+        // 串行排期（原逻辑）：紧接前置节点之后下一个工作日
+        var afterPrev = new Date(pEnd); afterPrev.setDate(afterPrev.getDate() + 1);
+        if (isMeeting) {
+          // 评审/周会同步正常排期，紧接前置节点之后下一个工作日
+          var earliest = _nextWorkday(afterPrev);
+          planStart = earliest;
+          planEnd = new Date(planStart);                        // 事件 1 天
+          embedDays = 1;
+        } else {
+          var _days = nodeDays(node, sizeChoice, req.sizeChoices, modeChoice);
+          var ownerBusy = oLast[ownerId] ? new Date(oLast[ownerId]) : null;
+          var cur = _nextWorkday(afterPrev);
+          // ignoreSeatWait=true（人力重组模式）：不等座位空出，尽早排（会与他人并发→标人力不足）
+          if (!ignoreSeatWait && ownerBusy) { var ab = new Date(ownerBusy); ab.setDate(ab.getDate()+1); ab = _nextWorkday(ab); if (ab > cur) { cur = ab; nodeSeatDelayed = true; } }
+          planStart = cur;
+          planEnd = _addWorkdays(planStart, _days);
+          embedDays = _days;
+          // 普通制作环节（非修改/发包）→ 记录为 lastProd，供后续 review/修改/发包 嵌入
+          if (node.type === 'make') lastProd = { start: new Date(planStart), end: new Date(planEnd), days: _days };
+        }
+        pEnd = planEnd;
       }
       tasks.push({
         id: uuid(),
@@ -2152,8 +2177,8 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
         nodeIdx: idx,
         nodeName: nodeDisplayName(node, sizeChoice, modeChoice),
         nodeType: node.type,            // make / review / sync / hr / archive
-        days: isMeeting ? 1 : nodeDays(node, sizeChoice, req.sizeChoices, modeChoice),
-        weeks: (isMeeting ? 1 : nodeDays(node, sizeChoice, req.sizeChoices, modeChoice)) / 7,
+        days: embedDays,
+        weeks: embedDays / 7,
         seatDelayed: nodeSeatDelayed,   // 该制作节点因等工种座位而被迫推后（人力瓶颈）
         litRole: !!node.litRole,        // 文学制作节点 → 导出用蓝色
         planStart: formatDate(planStart),
@@ -2165,12 +2190,11 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
         followup: node.type === 'review' ? '评审' : (node.type === 'sync' ? '周会同步' : (node.type === 'archive' ? '发包' : (node.type === 'hr' ? '人力' : '制作'))),
         weekNotes: [], changes: []
       });
-      if (!isMeeting) oLast[ownerId] = planEnd;   // 评审&周会同步不占制作产能
-      pEnd = planEnd;
+      // 产能占用：仅普通制作环节更新 oLast（review/修改/发包 并发，不占制作产能）
+      if (node.type === 'make' && !isEmbedded) oLast[ownerId] = planEnd;
     });
     // 三个后处理步骤（详见各函数注释）：①座位延后压缩 ②评审前空档拉长 ③重算座位占用
-    // ⚠️ 顺序要点：重算座位占用必须放最后——因为②会把制作节点拉长（planEnd 变晚），
-    //   若在②之前重算，座位占用记的是"拉长前"的旧结束日，下一条需求会从偏早的日子接手 → 与本条最后一天重叠
+    // ⚠️ v59：嵌入节点已在制作尾部，②的「填补评审前空档」对其无效果（评审在制作内部，无空档），符合预期
     _compactSeatDelayGap(tasks);
     _stretchMakeBeforeMeeting(tasks);
     _recomputeSeatOccupancy(tasks, oLast);
@@ -5822,6 +5846,7 @@ function exportExcelGantt() {
       review:  { fill:'F8BBD0', font:'AD1457' }, // 评审 粉红
       sync:    { fill:'E1BEE7', font:'6A1B9A' }, // 周会同步 紫（区别于评审红）
       make:    { fill:'B2DFDB', font:'00695C' }, // 制作 青
+      outsource:{ fill:'FFCC80', font:'E65100' }, // 发包 橙黄（区别于制作青）
       hr:      { fill:'FFE0B2', font:'E65100' }, // 人力 橙
       lit:     { fill:'C5CAE9', font:'283593' }, // 文学 蓝紫
       buffer:  { fill:'FFF3C4', font:'8A6D00' }, // 整体优化 淡黄（斜纹感）
@@ -5876,6 +5901,7 @@ function exportExcelGantt() {
         else if (t.nodeType === 'sync') color = COLOR.sync;
         else if (t.nodeType === 'buffer') color = COLOR.buffer;
         else if (t.litRole) color = COLOR.lit;              // 文学制作 → 蓝
+        else if (t.nodeName && t.nodeName.indexOf('发包') >= 0) color = COLOR.outsource; // 发包 → 橙黄
         else {
           var role = makeRole(t.nodeName, r.category);   // lit / sceneArt / charArt
           color = (role === 'lit') ? COLOR.lit : COLOR.make;

@@ -931,7 +931,7 @@ V129云梦泽剧情场景概念刷新
 const DEFAULT_CONFIG = {
   // 配置版本号：每次改动内置 flows/holidays 结构就 +1，
   // loadState 会强制用新版覆盖旧缓存里的 flows/holidays（保留用户需求/任务）
-  _cfgVersion: 63,
+  _cfgVersion: 64,
   sceneStoryHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   sceneWorldHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   charKeyHours: { 1: 1.5, 2: 0.5, 3: 0.6, 4: 1.2, 5: 1, 6: 2.4, 7: 1, 8: 0.5 },
@@ -4468,7 +4468,7 @@ function renderPool() {
     ${reqs.length ? reqs.map(r => `
       <div class="pool-row${r.overDDL ? ' over-ddl' : ''}" data-req="${r.id}">
         <div class="pool-cell check-cell" onclick="event.stopPropagation()"><input type="checkbox" class="pool-check" data-req="${r.id}" onclick="event.stopPropagation()"></div>
-        <div class="pool-cell"><strong>${r.name}</strong> <span class="name-gen-tag" title="生成规范名称（复制到 TAPD / SG）" onclick="event.stopPropagation(); window._showReqNames('${r.id}')">🏷 取名</span>${r.overDDL ? ` <span class="ddl-warn-tag" title="${r.overDDLReason === 'manpower' ? '制作人力不足导致超 DDL（可增人手/拆并行）' : '工期本身超过 DDL（建议改 DDL / 砍量），点击做可选压缩优化'}，点击做可选压缩优化（缩缓冲），或改 DDL / 拆并行" onclick="event.stopPropagation(); window._optimizeOverDDL('${r.id}')">⚠超DDL${r.overDDLReason === 'manpower' ? '·人力' : ''}</span>` : ''}${r.category === 'lit-system' ? ' <span class="sys-warn-tag" title="系统文学设定，需 PM 特别关注">⚠系统设定</span>' : ''}<div class="text-muted text-sm">${r.pipelines?.map(p => getPipeline(p)?.name).filter(Boolean).join(' · ') || ''}</div></div>
+        <div class="pool-cell"><strong>${r.name}</strong> <span class="name-gen-tag" title="生成规范名称（复制到 TAPD / SG）" onclick="event.stopPropagation(); window._showReqNames('${r.id}')">🏷 取名</span>${r.overDDL ? ` <span class="ddl-warn-tag" title="${r.overDDLReason === 'manpower' ? '制作人力不足导致超 DDL（可增人手/拆并行）' : '工期本身超过 DDL（建议改 DDL / 砍量），点击做可选压缩优化'}，点击做可选压缩优化（缩缓冲），或改 DDL / 拆并行" onclick="event.stopPropagation(); window._optimizeOverDDL('${r.id}')">⚠超DDL${r.overDDLReason === 'manpower' ? '·人力' : ''}</span>` : ''}${r.category === 'lit-system' ? ' <span class="sys-warn-tag" title="系统文学设定，需 PM 特别关注并单独拉起排期（建议单独排期）">⚠系统设定，建议单独排期</span>' : ''}<div class="text-muted text-sm">${r.pipelines?.map(p => getPipeline(p)?.name).filter(Boolean).join(' · ') || ''}</div></div>
         <div class="pool-cell">${catLabel(r)}</div>
         <div class="pool-cell">${escapeHtml(reqPersonLabel(r))}</div>
         <div class="pool-cell"><span class="prio-badge ${r.priority === 'reject' ? 'reject' : r.priority === 'P0' ? 's' : r.priority === 'P1' ? 'a' : 'b'}">${r.priority === 'reject' ? '打回' : r.priority === 'P0' ? 'S' : r.priority === 'P1' ? 'A' : 'B'}</span></div>

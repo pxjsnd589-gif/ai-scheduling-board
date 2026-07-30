@@ -3957,10 +3957,12 @@ function doImport() {
   validRows.forEach((row, i) => {
     try {
       const name = colVal(row, 'name');
-      const big = colVal(row, 'bigCategory');
-      const subS = colVal(row, 'subScene');
-      const subC = colVal(row, 'subChar');
-      const subL = colVal(row, 'subLit');
+      // ⚠️ 腾讯问卷导出的分类/子类值常带 "A."/"B." 选项前缀（如 "C.纯文学类"、"B.系统性设定（如：区域概念）"），
+      //    必须像 parseQuestionnaireMultiCol 那样先去前缀，否则 resolveCat 精确匹配会 miss → 错归到 scene-story。
+      const big = stripMatrixPrefix(colVal(row, 'bigCategory'));
+      const subS = stripMatrixPrefix(colVal(row, 'subScene'));
+      const subC = stripMatrixPrefix(colVal(row, 'subChar'));
+      const subL = stripMatrixPrefix(colVal(row, 'subLit'));
       const category = resolveCat(big, subS, subC, subL) || 'scene-story';
       const ddl = colVal(row, 'ddl') || '';
       const requester = colVal(row, 'requester') || '';

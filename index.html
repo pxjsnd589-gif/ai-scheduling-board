@@ -5111,7 +5111,7 @@ function renderFlowsEditor() {
   const wrap = document.getElementById('flowsEditor');
   if (!wrap) return;
   const flows = (state.config && state.config.flows) || {};
-  const TYPE_OPTS = [['hr','人力'],['make','制作'],['review','评审'],['sync','周会同步']];
+  const TYPE_OPTS = [['hr','人力'],['make','制作'],['review','评审']];
   const OWNER_OPTS = [['worker','worker'],['reviewer_p0','P0 东哥'],['reviewer_p1','P1 Leader'],['reviewer_p2','P2 对接人']];
   wrap.innerHTML = Object.entries(flows).map(([fid, f]) => {
     const totalDays = (f.nodes || []).reduce((s, n) => s + nodeDays(n), 0);

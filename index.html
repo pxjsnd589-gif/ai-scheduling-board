@@ -1525,7 +1525,7 @@ const MIDS_WITH_ORDER = new Set(['角色原画', '场景原画']);
 const CATEGORY_TREE = {
   '场景类': { '剧情场景': 'scene-story', '世界观场景': 'scene-world' },
   '角色类': { '重点NPC': 'char-key', 'NPC': 'char-normal' },
-  '纯文学类': { '简单补充设定': 'lit-simple', '系统文学设定': 'lit-system' }
+  '纯文学类': { '简单补充设定': 'lit-simple', '系统性设定': 'lit-system' }
 };
 
 
@@ -4195,7 +4195,7 @@ function showBatchSubmitResult(results) {
         ? `<div class="text-sm" style="color:#B91C1C;margin-top:2px;font-size:11.5px;">${escapeHtml(step4Detail)}</div>`
         : '';
       // 系统文学设定警报：文学子分类=系统文学设定 → 提醒 PM 特别关注
-      const isSysConcept = (r.req && r.req.category === 'lit-system') || rec.subLit === '系统文学设定';
+      const isSysConcept = (r.req && r.req.category === 'lit-system') || rec.subLit === '系统性设定';
       const sysWarnLine = isSysConcept
         ? `<div class="text-sm" style="color:#B45309;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:4px 8px;margin-top:4px;">⚠ 此为<b>系统文学设定</b>，影响面大，请 PM 特别评估资源与优先级</div>`
         : '';

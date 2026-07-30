@@ -2878,7 +2878,14 @@ function splitAssets(s) {
 function resolveCategory(big, subScene, subChar, subLit) {
   if (big === '场景类' && subScene) return CATEGORY_TREE['场景类'][subScene] || 'scene-story';
   if (big === '角色类' && subChar) return CATEGORY_TREE['角色类'][subChar] || 'char-key';
-  if (big === '纯文学类' && subLit) return CATEGORY_TREE['纯文学类'][subLit] || 'lit-simple';
+  if (big === '纯文学类' && subLit) {
+    // 问卷选项常带括号说明（如"系统性设定（如：区域概念）"），做前缀匹配
+    const direct = CATEGORY_TREE['纯文学类'][subLit];
+    if (direct) return direct;
+    const keys = Object.keys(CATEGORY_TREE['纯文学类'] || {});
+    const found = keys.find(k => subLit.indexOf(k) === 0);
+    return found ? CATEGORY_TREE['纯文学类'][found] : 'lit-simple';
+  }
   if (big === '场景类') return 'scene-story';
   if (big === '角色类') return 'char-key';
   if (big === '纯文学类') return 'lit-simple';
@@ -3895,7 +3902,13 @@ function doImport() {
   const resolveCat = (big, subScene, subChar, subLit) => {
     if (big === '场景类' && subScene) return CATEGORY_TREE['场景类'][subScene] || 'scene-story';
     if (big === '角色类' && subChar) return CATEGORY_TREE['角色类'][subChar] || 'char-key';
-    if (big === '纯文学类' && subLit) return CATEGORY_TREE['纯文学类'][subLit] || 'lit-simple';
+    if (big === '纯文学类' && subLit) {
+      const direct = CATEGORY_TREE['纯文学类'][subLit];
+      if (direct) return direct;
+      const keys = Object.keys(CATEGORY_TREE['纯文学类'] || {});
+      const found = keys.find(k => subLit.indexOf(k) === 0);
+      return found ? CATEGORY_TREE['纯文学类'][found] : 'lit-simple';
+    }
     if (big === '场景类') return 'scene-story';
     if (big === '角色类') return 'char-key';
     if (big === '纯文学类') return 'lit-simple';

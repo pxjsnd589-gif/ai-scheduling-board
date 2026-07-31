@@ -836,7 +836,7 @@ V129云梦泽剧情场景概念刷新
 <div class="modal-backdrop hidden" id="sceneConceptPickerModal">
   <div class="modal" style="max-width:600px;">
     <div class="modal-header">
-      <div class="modal-title">世界观场景 · 是否需要出概念图</div>
+      <div class="modal-title">世界观场景 · 是否仅需概念草图</div>
       <button class="modal-close" id="sceneConceptPickerClose">✕</button>
     </div>
     <div class="modal-body">
@@ -4909,10 +4909,10 @@ function showSceneConceptModal(questions, onConfirm) {
     const cur = (getReq(q.reqId) || {}).sceneNeedConcept;
     const def = (cur === false) ? 'no' : 'yes';
     return `<div class="size-q" data-qi="${qi}">
-      <div class="size-q-head"><span class="size-q-req">${q.reqName}</span> · 是否需要出概念图？</div>
+      <div class="size-q-head"><span class="size-q-req">${q.reqName}</span> · 是否仅需概念草图？</div>
       <div class="size-q-opts">
-        <label class="size-opt"><input type="radio" name="scq_${qi}" value="yes" ${def === 'yes' ? 'checked' : ''}> <b>需要</b> · 按矩阵正常排期（含概念图）</label>
-        <label class="size-opt"><input type="radio" name="scq_${qi}" value="no" ${def === 'no' ? 'checked' : ''}> <b>不需要</b> · 只排到概念方向草图（无视矩阵）</label>
+        <label class="size-opt"><input type="radio" name="scq_${qi}" value="yes" ${def === 'yes' ? 'checked' : ''}> <b>是</b> · 正常排期</label>
+        <label class="size-opt"><input type="radio" name="scq_${qi}" value="no" ${def === 'no' ? 'checked' : ''}> <b>否</b> · 正常排期</label>
       </div>
     </div>`;
   }).join('');

@@ -813,6 +813,46 @@ V129云梦泽剧情场景概念刷新
   </div>
 </div>
 
+<div class="modal-backdrop hidden" id="charCardPickerModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <div class="modal-title">选择角色卡类型（重点NPC）</div>
+      <button class="modal-close" id="charCardPickerClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="text-muted text-sm" style="margin-bottom:12px;">重点NPC 需求请选择角色卡交付方式，排期将据此计算工期。</div>
+      <div id="charCardPickerBody"></div>
+    </div>
+    <div class="modal-footer">
+      <div></div>
+      <div class="modal-footer-right">
+        <button class="btn btn-secondary" id="charCardPickerCancel">取消</button>
+        <button class="btn btn-primary" id="charCardPickerConfirm">确认并排期</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="sceneConceptPickerModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <div class="modal-title">世界观场景 · 是否需要出概念图</div>
+      <button class="modal-close" id="sceneConceptPickerClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="text-muted text-sm" style="margin-bottom:12px;">世界观场景需求请确认是否需要产出概念图。选「不需要」将只排期到概念方向草图（无视矩阵）。</div>
+      <div id="sceneConceptPickerBody"></div>
+    </div>
+    <div class="modal-footer">
+      <div></div>
+      <div class="modal-footer-right">
+        <button class="btn btn-secondary" id="sceneConceptPickerCancel">取消</button>
+        <button class="btn btn-primary" id="sceneConceptPickerConfirm">确认并排期</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop hidden" id="decisionModal">
   <div class="modal" style="width:780px;">
     <div class="modal-header">
@@ -931,7 +971,7 @@ V129云梦泽剧情场景概念刷新
 const DEFAULT_CONFIG = {
   // 配置版本号：每次改动内置 flows/holidays 结构就 +1，
   // loadState 会强制用新版覆盖旧缓存里的 flows/holidays（保留用户需求/任务）
-  _cfgVersion: 68,
+  _cfgVersion: 69,
   sceneStoryHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   sceneWorldHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   charKeyHours: { 1: 1.5, 2: 0.5, 3: 0.6, 4: 1.2, 5: 1, 6: 2.4, 7: 1, 8: 0.5 },
@@ -1185,12 +1225,18 @@ const DEFAULT_ITEM_TIME = {
   },
   // v49: 原画环节强制前置文学设定（除非提需人已填已有文学设定）
   //   场景原画 → 场景文学设定（小-2天 / 中-5天 / 大-7天，弹小中大选择；道具设定走小档）
-  //   角色原画 → 角色卡文学设定（整组开发-30人天/组 / 单角色-7人天/角色，弹模式选择）
+  //   角色原画 → 角色卡文学设定（按角色子类工时，见 cardKinds；普通NPC固定3天，重点NPC/英雄弹窗选）
   '场景文学设定': { sizes: { 大: 7, 中: 5, 小: 2 }, unit: '人天', per: '项' },
+  // v69: 角色卡文学设定工时按角色子类区分（cardKinds，非统一 modes）
+  //   · 普通NPC(char-normal) → 固定 3 人天（排期前自动写入，不弹窗）
+  //   · 重点NPC(char-key)   → 弹窗二选一：重点NPC角色卡(7~8人天/角色) 或 英雄角色卡(整组30人天/组 | 单角色6~8人天/角色)
+  //   数值与独立产出物 NPC角色卡/重点NPC角色卡/英雄角色卡 对齐
   '角色卡文学设定': {
-    modes: {
-      '整组开发': { min: 30, max: 30, unit: '人天', per: '组', desc: '角色卡全量开发·30工作日' },
-      '单角色': { min: 7, max: 7, unit: '人天', per: '角色', desc: '单个角色卡独立开发' }
+    cardKinds: {
+      'NPC固定':             { min: 3,  max: 3,  unit: '人天', per: '组',  desc: '普通NPC角色卡·固定3人天' },
+      '重点NPC角色卡':       { min: 7,  max: 8,  unit: '人天', per: '角色', desc: '重点NPC角色卡' },
+      '英雄角色卡-整组开发':   { min: 30, max: 30, unit: '人天', per: '组',  desc: '英雄角色卡·整组开发（约12储备+8重点）' },
+      '英雄角色卡-单角色':    { min: 6,  max: 8,  unit: '人天', per: '角色', desc: '英雄角色卡·单角色独立开发' }
     }
   },
 };
@@ -1225,6 +1271,7 @@ function itemTimeKind(itemName) {
   const t = getItemTable()[itemName];
   if (!t) return '';
   if (t.modes) return '模式';
+  if (t.cardKinds) return '角色卡';
   if (t.sizes) return '大中小';
   if (t.min != null) return '范围';
   return '';
@@ -1236,6 +1283,9 @@ function itemTimeText(itemName) {
   if (t.modes) {
     return Object.entries(t.modes).map(([k, v]) => `${k}${v.min === v.max ? v.min : v.min + '~' + v.max}`).join(' / ');
   }
+  if (t.cardKinds) {
+    return Object.entries(t.cardKinds).map(([k, v]) => `${kindLabel(k)}·${v.min === v.max ? v.min : v.min + '~' + v.max}`).join(' / ');
+  }
   if (t.sizes) {
     return Object.entries(t.sizes).map(([k, v]) => `${k}${v}`).join('/');
   }
@@ -1243,6 +1293,31 @@ function itemTimeText(itemName) {
     return t.min === t.max ? `${t.min}` : `${t.min}~${t.max}`;
   }
   return '—';
+}
+// v69: 角色卡文学设定「按角色子类选档」辅助
+function kindLabel(k) {
+  return ({ 'NPC固定': '普通NPC固定', '重点NPC角色卡': '重点NPC角色卡', '英雄角色卡-整组开发': '英雄角色卡·整组开发', '英雄角色卡-单角色': '英雄角色卡·单角色' })[k] || k;
+}
+function fmtKind(m) {
+  const rng = m.min === m.max ? `${m.min}` : `${m.min}-${m.max}`;
+  return `${rng}${m.unit}/${m.per}`;
+}
+// 角色卡文学设定实际档位：优先用已选 modeChoice，否则按角色子类兜底（普通NPC=固定3天，重点NPC=重点NPC角色卡）
+function charCardKind(req, modeChoice) {
+  const t = getItemTable()['角色卡文学设定'];
+  if (modeChoice && t.cardKinds[modeChoice]) return modeChoice;
+  if (req && req.category === 'char-normal') return 'NPC固定';
+  return '重点NPC角色卡';
+}
+// 强制文学设定环节计入工期时使用（分类感知）：角色卡文学设定按子类，其余走 getItemTime
+function forcedLitTime(req, item) {
+  if (item === '角色卡文学设定') {
+    const t = getItemTable()['角色卡文学设定'];
+    const kind = charCardKind(req, req.modeChoices && req.modeChoices['item:角色卡文学设定']);
+    const m = t.cardKinds[kind];
+    return { min: m.min, max: m.max, unit: m.unit, per: m.per };
+  }
+  return getItemTime(item);
 }
 // 天数徽标配色
 function daysBadgeStyle(kind) {
@@ -1473,6 +1548,12 @@ function expandedFlowNodes(req, flowNodes) {
     });
   }
 
+  // v69: 世界观场景「是否需要出概念图」——PM 在排期前弹窗选择；选"不需要"则只排到概念方向草图，无视矩阵
+  if (req.category === 'scene-world' && req.sceneNeedConcept === false) {
+    const _idx = out.findIndex(function(n){ return n.type === 'make' && n.item === '概念方向草图'; });
+    if (_idx >= 0) out = out.slice(0, _idx + 1);
+  }
+
   return out;
 }
 // Bible 合并块工时：各产出项工时相加（多档按 sizeChoices['item:xxx'] 选定档，未选默认中）
@@ -1496,7 +1577,7 @@ function itemRangeLabel(itemName) {
   return t.min === t.max ? `${t.min}天` : `${t.min}-${t.max}天`;
 }
 // 计算 flow 节点的实际工期：litBundle → 各项相加；带 item → 最大值×数量（min/max 范围取 max；多档按 sizeChoice）；否则固定 days
-function nodeDays(node, sizeChoice, sizeChoices, modeChoice) {
+function nodeDays(node, sizeChoice, sizeChoices, modeChoice, req) {
   if (node.litBundle) return litBundleDays(node, sizeChoices);
   if (node.item && getItemTable()[node.item]) {
     const t = getItemTable()[node.item];
@@ -1506,13 +1587,19 @@ function nodeDays(node, sizeChoice, sizeChoices, modeChoice) {
       const qty = node.qty != null ? node.qty : 1;
       return Math.max(1, Math.round(m.max * qty));
     }
+    if (node.item === '角色卡文学设定' && t.cardKinds) {
+      const kind = charCardKind(req, modeChoice);
+      const m = t.cardKinds[kind];
+      const qty = node.qty != null ? node.qty : 1;
+      return Math.max(1, Math.round(m.max * qty));
+    }
     const qty = node.qty != null ? node.qty : 1;
     return Math.max(1, Math.round(itemMedianDays(node.item, sizeChoice) * qty));
   }
   return node.days != null ? node.days : 1;
 }
 // 流程名 + 工时标注：litBundle → "Bible设定（xxx、yyy）"；多档 "名（中·5天）"；多模式 "名（整组开发·30天）"；单档 "名（3-5天）"
-function nodeDisplayName(node, sizeChoice, modeChoice) {
+function nodeDisplayName(node, sizeChoice, modeChoice, req) {
   if (node.litBundle) return litBundleName(node);
   if (node.item && getItemTable()[node.item]) {
     const t = getItemTable()[node.item];
@@ -1521,6 +1608,12 @@ function nodeDisplayName(node, sizeChoice, modeChoice) {
       const m = t.modes[modeName];
       const rng = m.min === m.max ? `${m.min}` : `${m.min}-${m.max}`;
       return `${node.name}（${modeName}·${rng}天）`;
+    }
+    if (node.item === '角色卡文学设定' && t.cardKinds) {
+      const kind = charCardKind(req, modeChoice);
+      const m = t.cardKinds[kind];
+      const rng = m.min === m.max ? `${m.min}` : `${m.min}-${m.max}`;
+      return `${node.name}（${kindLabel(kind)}·${rng}天）`;
     }
     if (t.sizes && Object.keys(t.sizes).length >= 2) {
       const size = (sizeChoice && t.sizes[sizeChoice] != null) ? sizeChoice
@@ -1712,6 +1805,8 @@ function calculateRemaining(req) {
   const specialSet = new Set(req.specialItems || []);  // 特殊需求具体项
   let pipeIds = req.pipelines || [];
   const category = req.category || '';   // 用于美术产出物按分类过滤（场景/角色）
+  // v69: 世界观场景「不需要出概念图」→ 估算也跳过概念图（及之后的设定与拆分图），与排期截断一致
+  const sceneNoConcept = (category === 'scene-world' && req.sceneNeedConcept === false);
   // v48: 纯文学类需求(lit-simple/lit-system)的文学产出物全部在 Bible概念 管线下，
   //   即使用户未勾选 Bible概念 管线，也自动纳入计算（否则文学项永远丢失→不展开→不排期）
   if (category === 'lit-simple' || category === 'lit-system') {
@@ -1743,6 +1838,8 @@ function calculateRemaining(req) {
     (PIPELINE_REQUIRED[name] || []).forEach(item => {
       // 美术产出物按分类过滤：场景类只留场景原画、角色类只留角色原画（文学项不受限）
       if (!artItemAllowedForCategory(item, category)) return;
+      // v69: 世界观场景不需要概念图 → 跳过概念图及其后的设定与拆分图（与排期截断一致）
+      if (sceneNoConcept && (item === '概念图' || item === '设定与拆分图')) return;
       if (!isItemDone(item)) {
         const t = getItemTime(item);
         requiredTodo.push({ item, time: t, pipe: name });
@@ -1751,6 +1848,7 @@ function calculateRemaining(req) {
     // 可选项（特殊需求）
     (PIPELINE_OPTIONAL[name] || []).forEach(item => {
       if (!artItemAllowedForCategory(item, category)) return;
+      if (sceneNoConcept && (item === '概念图' || item === '设定与拆分图')) return;
       if (specialSet.has(item) && !isItemDone(item)) {
         const t = getItemTime(item);
         optionalTodo.push({ item, time: t, pipe: name });
@@ -1760,7 +1858,7 @@ function calculateRemaining(req) {
 
   // v49: 强制前置文学设定计入工期（与排期引擎一致，避免决策链估算偏低导致漏判超 DDL）
   computeForcedLit(req).forEach(f => {
-    const t = getItemTime(f.item);
+    const t = forcedLitTime(req, f.item);
     requiredTodo.push({ item: f.item, time: t, pipe: '强制文学设定', forcedLit: f.type });
   });
 
@@ -2180,7 +2278,7 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
           planEnd = new Date(planStart);                        // 事件 1 天
           embedDays = 1;
         } else {
-          var _days = nodeDays(node, sizeChoice, req.sizeChoices, modeChoice);
+          var _days = nodeDays(node, sizeChoice, req.sizeChoices, modeChoice, req);
           var ownerBusy = oLast[ownerId] ? new Date(oLast[ownerId]) : null;
           var cur = _nextWorkday(afterPrev);
           // ignoreSeatWait=true（人力重组模式）：不等座位空出，尽早排（会与他人并发→标人力不足）
@@ -2197,7 +2295,7 @@ function autoSchedule(req, decision, batchIdx = 0, opts = {}) {
         id: uuid(),
         reqId: req.id,
         nodeIdx: idx,
-        nodeName: nodeDisplayName(node, sizeChoice, modeChoice),
+        nodeName: nodeDisplayName(node, sizeChoice, modeChoice, req),
         nodeType: node.type,            // make / review / sync / hr / archive
         days: embedDays,
         weeks: embedDays / 7,
@@ -4462,21 +4560,41 @@ function _saveReqToPool(req, decision, options = {}) {
   state.requirements.push(normalizeReq(req));
   if (autoScheduleNow) {
     if (decision.gatePass) {
-      const tasks = autoSchedule(req, decision);
-      state.tasks.push(...tasks);
-      req.status = 'running';
-      toast(`已写入 ${tasks.length} 个节点任务到甘特图`, 'success');
+      // v69: 单个需求直接排期，也复用与批量一致的弹窗收集（量级 / 模式 / 角色卡 / 概念图）
+      if (req.category === 'char-normal') { if (!req.modeChoices) req.modeChoices = {}; req.modeChoices['item:角色卡文学设定'] = 'NPC固定'; }
+      const _t = [req];
+      const sizeQ = collectSizeQuestions(_t);
+      const modeQ = collectModeQuestions(_t);
+      const ccQ   = collectCharCardQuestions(_t);
+      const scQ   = collectSceneConceptQuestions(_t);
+      runPreScheduleModals([
+        [sizeQ, showSizePickerModal],
+        [modeQ, showModePickerModal],
+        [ccQ,   showCharCardModal],
+        [scQ,   showSceneConceptModal]
+      ], () => {
+        const tasks = autoSchedule(req, decision);
+        state.tasks.push(...tasks);
+        req.status = 'running';
+        saveState();
+        document.getElementById('decisionModal').classList.add('hidden');
+        toast(`已写入 ${tasks.length} 个节点任务到甘特图`, 'success');
+        if (!skipSwitch) switchView('board');
+      });
     } else {
       req.status = 'error';
+      saveState();
+      document.getElementById('decisionModal').classList.add('hidden');
       toast('判定不通过，未写入任务（请到需求池调整后批量排期）', 'warn');
+      if (!skipSwitch) switchView('board');
     }
   } else {
     req.status = decision.gatePass ? 'pending' : 'error';
+    saveState();
+    document.getElementById('decisionModal').classList.add('hidden');
     toast(decision.gatePass ? `已录入需求池（待排期）` : '判定不通过，已录入但标红，请调整后批量排期', 'success');
+    if (!skipSwitch) switchView('pool');
   }
-  saveState();
-  document.getElementById('decisionModal').classList.add('hidden');
-  if (!skipSwitch) switchView(autoScheduleNow ? 'board' : 'pool');
 }
 document.getElementById('decisionSaveToPool').onclick = () => {
   const modal = document.getElementById('decisionModal');
@@ -4599,27 +4717,22 @@ function batchSchedule() {
   targets = targets.filter(r => r.status === 'pending' && !state.tasks.some(t => t.reqId === r.id));
   if (!targets.length) { toast('没有可排的"待排期"需求（先在录入页提交，或在需求池里筛选）', 'warn'); return; }
 
-  // v10: 排期前先收集「多档产出物」节点，弹窗让 PM 选大/中/小；选完再真正排期
-  const sizeQuestions = collectSizeQuestions(targets);
-  if (sizeQuestions.length) {
-    showSizePickerModal(sizeQuestions, () => {
-      // 多模式产出物（如英雄角色卡整组/单角色）弹窗，选完再排
-      const modeQuestions = collectModeQuestions(targets);
-      if (modeQuestions.length) {
-        showModePickerModal(modeQuestions, () => _doBatchSchedule(targets));
-      } else {
-        _doBatchSchedule(targets);
-      }
-    });
-  } else {
-    // 无多档但有模式 → 直接弹模式选择
-    const modeQuestions = collectModeQuestions(targets);
-    if (modeQuestions.length) {
-      showModePickerModal(modeQuestions, () => _doBatchSchedule(targets));
-    } else {
-      _doBatchSchedule(targets);
-    }
-  }
+  // v69: 普通NPC(char-normal) 角色卡固定3天，排期前直接写入（不弹窗）
+  targets.forEach(r => {
+    if (r.category === 'char-normal') { if (!r.modeChoices) r.modeChoices = {}; r.modeChoices['item:角色卡文学设定'] = 'NPC固定'; }
+  });
+
+  // v10→v69: 排期前依序收集各类弹窗选择（量级 / 模式 / 角色卡 / 概念图），选完再真正排期
+  const sizeQ = collectSizeQuestions(targets);
+  const modeQ = collectModeQuestions(targets);
+  const ccQ   = collectCharCardQuestions(targets);
+  const scQ   = collectSceneConceptQuestions(targets);
+  runPreScheduleModals([
+    [sizeQ, showSizePickerModal],
+    [modeQ, showModePickerModal],
+    [ccQ,   showCharCardModal],
+    [scQ,   showSceneConceptModal]
+  ], () => _doBatchSchedule(targets));
 }
 
 // 收集所有待排需求里「多档产出物」→ 每个（按需求+产出项）生成一道选择题
@@ -4734,6 +4847,102 @@ function showModePickerModal(questions, onConfirm) {
     close();
     onConfirm();
   };
+}
+
+// v69: 收集重点NPC(char-key) 的「角色卡文学设定」档位选择（普通NPC固定3天，不在此收集）
+function collectCharCardQuestions(targets) {
+  const qs = [];
+  targets.forEach(r => {
+    if (r.category !== 'char-key') return;
+    qs.push({ reqId: r.id, reqName: r.name, itemName: '角色卡文学设定' });
+  });
+  return qs;
+}
+// v69: 弹窗让 PM 为「重点NPC」选择角色卡类型（重点NPC角色卡 / 英雄角色卡·整组 / 英雄角色卡·单角色）
+//   选完写入 req.modeChoices['item:角色卡文学设定'] 再回调
+function showCharCardModal(questions, onConfirm) {
+  const backdrop = document.getElementById('charCardPickerModal');
+  const body = document.getElementById('charCardPickerBody');
+  if (!backdrop || !body) { onConfirm(); return; }   // 兜底：无弹窗则直接排
+  const kinds = getItemTable()['角色卡文学设定'].cardKinds;
+  body.innerHTML = questions.map((q, qi) => {
+    const opts = Object.keys(kinds).map(k =>
+      `<label class="size-opt"><input type="radio" name="ccq_${qi}" value="${k}" ${k === '重点NPC角色卡' ? 'checked' : ''}> <b>${kindLabel(k)}</b> · ${fmtKind(kinds[k])}</label>`
+    ).join('');
+    return `<div class="size-q" data-qi="${qi}">
+      <div class="size-q-head"><span class="size-q-req">${q.reqName}</span> · ${q.itemName}</div>
+      <div class="size-q-opts">${opts}</div>
+    </div>`;
+  }).join('');
+  backdrop.classList.remove('hidden');
+  const close = () => backdrop.classList.add('hidden');
+  document.getElementById('charCardPickerClose').onclick = close;
+  document.getElementById('charCardPickerCancel').onclick = close;
+  document.getElementById('charCardPickerConfirm').onclick = () => {
+    questions.forEach((q, qi) => {
+      const sel = body.querySelector(`input[name="ccq_${qi}"]:checked`);
+      const kind = sel ? sel.value : '重点NPC角色卡';
+      const r = getReq(q.reqId);
+      if (r) { if (!r.modeChoices) r.modeChoices = {}; r.modeChoices['item:角色卡文学设定'] = kind; }
+    });
+    saveState();
+    close();
+    onConfirm();
+  };
+}
+
+// v69: 收集世界观场景(scene-world) 的「是否需要出概念图」选择
+function collectSceneConceptQuestions(targets) {
+  const qs = [];
+  targets.forEach(r => {
+    if (r.category !== 'scene-world') return;
+    qs.push({ reqId: r.id, reqName: r.name, itemName: '概念图' });
+  });
+  return qs;
+}
+// v69: 弹窗问 PM 世界观场景是否需要出概念图；选"不需要"则只排到概念方向草图（无视矩阵）
+function showSceneConceptModal(questions, onConfirm) {
+  const backdrop = document.getElementById('sceneConceptPickerModal');
+  const body = document.getElementById('sceneConceptPickerBody');
+  if (!backdrop || !body) { onConfirm(); return; }   // 兜底：无弹窗则按正常排
+  body.innerHTML = questions.map((q, qi) => {
+    const cur = (getReq(q.reqId) || {}).sceneNeedConcept;
+    const def = (cur === false) ? 'no' : 'yes';
+    return `<div class="size-q" data-qi="${qi}">
+      <div class="size-q-head"><span class="size-q-req">${q.reqName}</span> · 是否需要出概念图？</div>
+      <div class="size-q-opts">
+        <label class="size-opt"><input type="radio" name="scq_${qi}" value="yes" ${def === 'yes' ? 'checked' : ''}> <b>需要</b> · 按矩阵正常排期（含概念图）</label>
+        <label class="size-opt"><input type="radio" name="scq_${qi}" value="no" ${def === 'no' ? 'checked' : ''}> <b>不需要</b> · 只排到概念方向草图（无视矩阵）</label>
+      </div>
+    </div>`;
+  }).join('');
+  backdrop.classList.remove('hidden');
+  const close = () => backdrop.classList.add('hidden');
+  document.getElementById('sceneConceptPickerClose').onclick = close;
+  document.getElementById('sceneConceptPickerCancel').onclick = close;
+  document.getElementById('sceneConceptPickerConfirm').onclick = () => {
+    questions.forEach((q, qi) => {
+      const sel = body.querySelector(`input[name="scq_${qi}"]:checked`);
+      const v = sel ? sel.value : 'yes';
+      const r = getReq(q.reqId);
+      if (r) r.sceneNeedConcept = (v === 'yes');
+    });
+    saveState();
+    close();
+    onConfirm();
+  };
+}
+
+// v69: 依序串起多个弹窗收集步骤，每一步有问题时才弹对应弹窗；全部结束后回调
+function runPreScheduleModals(steps, finalCb) {
+  const step = steps.shift();
+  if (!step) { finalCb(); return; }
+  const [questions, modalFn] = step;
+  if (questions && questions.length) {
+    modalFn(questions, () => runPreScheduleModals(steps, finalCb));
+  } else {
+    runPreScheduleModals(steps, finalCb);
+  }
 }
 
 function _doBatchSchedule(targets) {

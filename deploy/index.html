@@ -4866,7 +4866,7 @@ function showCharCardModal(questions, onConfirm) {
   if (!backdrop || !body) { onConfirm(); return; }   // 兜底：无弹窗则直接排
   const kinds = getItemTable()['角色卡文学设定'].cardKinds;
   body.innerHTML = questions.map((q, qi) => {
-    const opts = Object.keys(kinds).map(k =>
+    const opts = Object.keys(kinds).filter(k => k !== 'NPC固定').map(k =>
       `<label class="size-opt"><input type="radio" name="ccq_${qi}" value="${k}" ${k === '重点NPC角色卡' ? 'checked' : ''}> <b>${kindLabel(k)}</b> · ${fmtKind(kinds[k])}</label>`
     ).join('');
     return `<div class="size-q" data-qi="${qi}">
@@ -4911,7 +4911,7 @@ function showSceneConceptModal(questions, onConfirm) {
     return `<div class="size-q" data-qi="${qi}">
       <div class="size-q-head"><span class="size-q-req">${q.reqName}</span> · 是否仅需概念草图？</div>
       <div class="size-q-opts">
-        <label class="size-opt"><input type="radio" name="scq_${qi}" value="yes" ${def === 'yes' ? 'checked' : ''}> <b>是</b> · 正常排期</label>
+        <label class="size-opt"><input type="radio" name="scq_${qi}" value="yes" ${def === 'yes' ? 'checked' : ''}> <b>是</b>。即可</label>
         <label class="size-opt"><input type="radio" name="scq_${qi}" value="no" ${def === 'no' ? 'checked' : ''}> <b>否</b> · 正常排期</label>
       </div>
     </div>`;

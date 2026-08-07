@@ -543,16 +543,6 @@
   .mt-2 { margin-top: 8px; } .mt-4 { margin-top: 16px; } .mb-2 { margin-bottom: 8px; } .mb-4 { margin-bottom: 16px; }
 
   /* 导入弹窗 */
-  .import-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border-default); margin-bottom: 16px; }
-  .import-tab { padding: 10px 16px; cursor: pointer; color: var(--text-secondary); font-size: 13px; font-weight: 500; border-bottom: 2px solid transparent; }
-  .import-tab:hover { color: var(--text-primary); }
-  .import-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-  .import-panel { display: none; }
-  .import-panel.active { display: block; }
-  .drop-zone { border: 2px dashed var(--border-default); border-radius: var(--radius-md); padding: 48px 24px; text-align: center; color: var(--text-secondary); transition: all 0.2s; cursor: pointer; }
-  .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: #F5F5FE; color: var(--accent); }
-  .drop-zone .dz-icon { font-size: 36px; margin-bottom: 8px; }
-  .drop-zone .dz-hint { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
   .import-file-info { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); margin-top: 12px; font-size: 13px; }
   .import-file-info .file-name { font-weight: 600; }
   .import-file-info .file-meta { color: var(--text-muted); font-size: 11px; }
@@ -583,16 +573,15 @@
 <nav id="topNav">
   <div class="brand">
     <div class="brand-logo">AI</div>
-    <span>智能排期工具 · 世界观组</span>
+    <span>智能排期工具</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" data-view="input">需求录入 & 需求池</button>
     <button class="nav-tab" data-view="settings">设置</button>
   </div>
   <div class="nav-right">
-    <button class="nav-btn" id="btnImportData" title="从腾讯问卷导入（粘贴 / xlsx / csv）">📥 导入数据</button>
-    <button class="nav-btn" id="btnExport" title="导出 JSON">📤 导出</button>
-    <button class="nav-btn" id="btnImport" title="导入 JSON">📥 JSON</button>
+    <button class="nav-btn" id="btnExport" title="把当前全部数据（需求 / 任务 / 设置）导出成 .json 备份文件">📤 导出JSON</button>
+    <button class="nav-btn" id="btnImport" title="读取之前导出的 .json 备份，整体覆盖当前数据（换电脑 / 恢复备份 / 传给同事时用）">📥 导入JSON</button>
     <button class="nav-btn" id="btnDemo" title="加载示例数据">✨ 示例</button>
     <button class="nav-btn" id="btnReset" title="重置">🔄 重置</button>
   </div>
@@ -625,9 +614,9 @@ V129云梦泽剧情场景概念刷新
               <div class="ai-file-drop" id="aiFileDrop">
                 <div class="ai-file-drop-icon">📎</div>
                 <div class="ai-file-drop-text">点击选择 / 拖拽文件到此处</div>
-                <div class="ai-file-drop-hint">支持 .xlsx / .xls / .csv（腾讯问卷导出）</div>
+                <div class="ai-file-drop-hint">支持 .xlsx / .xls / .csv / .txt（腾讯问卷导出，自动识别 GBK/UTF-16编码，≤5MB）</div>
               </div>
-              <input type="file" id="aiFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
+              <input type="file" id="aiFileInput" accept=".xlsx,.xls,.xlsm,.csv,.txt,.tsv" style="display:none;">
               <div class="ai-file-info" id="aiFileInfo" style="display:none;"></div>
             </div>
             <div class="ai-parse-card" id="parsePreview" style="display:none;">
@@ -871,74 +860,6 @@ V129云梦泽剧情场景概念刷新
   </div>
 </div>
 
-<!-- 批量导入弹窗（腾讯问卷 / Excel / CSV） -->
-<div class="modal-backdrop hidden" id="importModal">
-  <div class="modal" style="width:900px; max-width: 96vw;">
-    <div class="modal-header">
-      <div class="modal-title">📥 批量导入需求</div>
-      <button class="modal-close" id="importClose">✕</button>
-    </div>
-    <div class="modal-body">
-      <!-- Tab 切换 -->
-      <div class="import-tabs">
-        <div class="import-tab active" data-import-tab="paste">📋 粘贴</div>
-        <div class="import-tab" data-import-tab="file">📎 拖文件 (.xlsx / .csv / .txt)</div>
-      </div>
-
-      <!-- Tab 1: 粘贴 -->
-      <div class="import-panel active" id="importPanel-paste">
-        <div class="text-sm text-muted mb-2">从腾讯问卷/Excel/WPS 复制表格内容，按 Ctrl+V 粘贴到这里。工具会智能识别表头和矩阵题。</div>
-        <textarea class="paste-area" id="importPasteText" style="height:180px;" placeholder="直接 Ctrl+V 即可，不用刻意整理"></textarea>
-        <div class="row mt-2" style="justify-content: space-between;">
-          <span class="text-muted text-sm" id="importPasteInfo">等待粘贴…</span>
-          <button class="btn btn-primary btn-sm" id="importPasteBtn">解析</button>
-        </div>
-      </div>
-
-      <!-- Tab 2: 拖文件 -->
-      <div class="import-panel" id="importPanel-file">
-        <div class="drop-zone" id="dropZone">
-          <div class="dz-icon">📎</div>
-          <div><b>拖文件到这里</b> 或点击选择</div>
-          <div class="dz-hint">支持 .xlsx (腾讯问卷导出) / .csv / .txt · 单文件 ≤ 5MB</div>
-          <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv,.txt" style="display:none;">
-        </div>
-        <div id="importFileInfo"></div>
-      </div>
-
-      <!-- 字段映射区 -->
-      <div id="importMappingArea" style="display:none; margin-top: 20px;">
-        <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <div style="font-weight: 600;">🔗 字段映射 <span class="text-muted text-sm">（自动猜测，不对可改）</span></div>
-          <div class="row" style="gap: 8px;">
-            <label class="text-sm"><input type="checkbox" id="importHasHeader" checked> 第一行是表头</label>
-            <button class="btn btn-ghost btn-sm" id="importRemapBtn">重新识别</button>
-          </div>
-        </div>
-        <div class="preview-table-wrap" style="max-height: 240px;">
-          <table class="mapping-table" id="importMappingTable"></table>
-        </div>
-      </div>
-
-      <!-- 数据预览区 -->
-      <div id="importPreviewArea" style="display:none; margin-top: 16px;">
-        <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <div style="font-weight: 600;">👀 预览 <span class="text-muted text-sm" id="importPreviewInfo"></span></div>
-        </div>
-        <div class="preview-table-wrap">
-          <table class="preview-table" id="importPreviewTable"></table>
-        </div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <div class="modal-footer-left text-muted text-sm" id="importStatus">未开始</div>
-      <div class="modal-footer-right">
-        <button class="btn btn-ghost btn-sm" id="importCancel">取消</button>
-        <button class="btn btn-primary btn-sm" id="importConfirm" disabled>导入 0 条</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- 批量提交结果弹窗（队列全跑完决策链后） -->
 <div class="modal-backdrop hidden" id="batchModal">
@@ -961,7 +882,6 @@ V129云梦泽剧情场景概念刷新
 
 
 <input type="file" id="fileInput" accept=".json" style="display:none;">
-<input type="file" id="importFileInputHidden" accept=".xlsx,.xls,.csv,.txt" style="display:none;">
 
 <script>
 /* ========================================================================
@@ -971,7 +891,7 @@ V129云梦泽剧情场景概念刷新
 const DEFAULT_CONFIG = {
   // 配置版本号：每次改动内置 flows/holidays 结构就 +1，
   // loadState 会强制用新版覆盖旧缓存里的 flows/holidays（保留用户需求/任务）
-  _cfgVersion: 69,
+  _cfgVersion: 70,
   sceneStoryHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   sceneWorldHours: { 1: 2, 2: 1, 3: 2, 4: 2, 5: 0, 6: 0 },
   charKeyHours: { 1: 1.5, 2: 0.5, 3: 0.6, 4: 1.2, 5: 1, 6: 2.4, 7: 1, 8: 0.5 },
@@ -1011,8 +931,9 @@ const DEFAULT_CONFIG = {
   // - type: 'make'    制作（按 ITEM_TIME 估工时）
   //        'review'  评审（1 天）
   //        'archive' 归档（收尾，0 天，仅占位）
-  // - ownerRule:   worker / reviewer_p0 / reviewer_p1 / reviewer_p2
-  // - reviewerRule: 评审时显示的审批人名
+  // - ownerRule:   'worker'（制作人：按工种座位池 lit/sceneArt/charArt 自动匹配）
+  //                'reviewer'（评审人：由 resolveReqReviewer() 按该需求的内部重要程度分档）
+  //   ⚠️ 评审人具体是谁不在节点上配置，故没有 reviewerRule 字段
   // 修改后「重排已选需求」即可生效；老 task 的 owner 不会自动改
   // flow 节点若带 item 字段 → 工期 = ITEM_TIME[item] 最大值 × qty(默认1)，并可在导出时标注(x-x天)
   // 不带 item 的节点（评审/归档/修改）用固定 days
@@ -1020,58 +941,58 @@ const DEFAULT_CONFIG = {
     'scene-story': {
       name: '剧情场景',
       nodes: [
-        { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '文学评审',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' },
-        { type: 'make',   name: '场景概念方向草图',        item: '概念方向草图', qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'make',   name: '场景概念图',              item: '概念图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '概念图评审2',                days: 1, ownerRule: 'reviewer_p1', reviewerRule: '' },
-        { type: 'make',   name: '设定与拆分图',            item: '设定与拆分图', qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'make',   name: '发包资料整理',            days: 3,            qty: 1, ownerRule: 'worker',     reviewerRule: '' }
+        { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker' },
+        { type: 'review', name: '文学评审',                     daysMin: 1, daysMax: 1, ownerRule: 'reviewer' },
+        { type: 'make',   name: '场景概念方向草图',        item: '概念方向草图', qty: 1, ownerRule: 'worker' },
+        { type: 'make',   name: '场景概念图',              item: '概念图',       qty: 1, ownerRule: 'worker' },
+        { type: 'review', name: '概念图评审2',                daysMin: 1, daysMax: 1, ownerRule: 'reviewer' },
+        { type: 'make',   name: '设定与拆分图',            item: '设定与拆分图', qty: 1, ownerRule: 'worker' },
+        { type: 'make',   name: '发包资料整理',            daysMin: 3, daysMax: 3,            qty: 1, ownerRule: 'worker' }
       ]
     },
     'scene-world': {
       name: '世界观场景',
       nodes: [
-        { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '文学评审',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' },
-        { type: 'make',   name: '场景概念方向草图',        item: '概念方向草图', qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'make',   name: '场景概念图',              item: '概念图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '概念图评审',                        days: 1, ownerRule: 'reviewer_p1', reviewerRule: '' }
+        { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker' },
+        { type: 'review', name: '文学评审',                     daysMin: 1, daysMax: 1, ownerRule: 'reviewer' },
+        { type: 'make',   name: '场景概念方向草图',        item: '概念方向草图', qty: 1, ownerRule: 'worker' },
+        { type: 'make',   name: '场景概念图',              item: '概念图',       qty: 1, ownerRule: 'worker' },
+        { type: 'review', name: '概念图评审',                        daysMin: 1, daysMax: 1, ownerRule: 'reviewer' }
       ]
     },
     'char-key': {
       name: '重点 NPC',
       nodes: [
-        { type: 'make',   name: '角色卡文学设定',          item: '角色卡文学设定', qty: 1, litRole: true, ownerRule: 'worker',    reviewerRule: '' },
-        { type: 'review', name: '文学评审',                     days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' },
-        { type: 'make',   name: '印象图',                  item: '印象图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '印象图评估',                                  days: 1, ownerRule: 'reviewer_p2', reviewerRule: '' },
-        { type: 'make',   name: '设定图',                  item: '设定图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'make',   name: '三视图',                  item: '三视图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '终评',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' }
+        { type: 'make',   name: '角色卡文学设定',          item: '角色卡文学设定', qty: 1, litRole: true, ownerRule: 'worker' },
+        { type: 'review', name: '文学评审',                     daysMin: 1, daysMax: 1, ownerRule: 'reviewer' },
+        { type: 'make',   name: '印象图',                  item: '印象图',       qty: 1, ownerRule: 'worker' },
+        { type: 'review', name: '印象图评估',                                  daysMin: 1, daysMax: 1, ownerRule: 'reviewer' },
+        { type: 'make',   name: '设定图',                  item: '设定图',       qty: 1, ownerRule: 'worker' },
+        { type: 'make',   name: '三视图',                  item: '三视图',       qty: 1, ownerRule: 'worker' },
+        { type: 'review', name: '终评',                         daysMin: 1, daysMax: 1, ownerRule: 'reviewer' }
       ]
     },
     'char-normal': {
       name: 'NPC（普通）',
       nodes: [
-        { type: 'make',   name: '角色卡文学设定',          item: '角色卡文学设定', qty: 1, litRole: true, ownerRule: 'worker',    reviewerRule: '' },
-        { type: 'review', name: '文学评审',                     days: 1, ownerRule: 'reviewer_p1', reviewerRule: '' },
-        { type: 'make',   name: '印象图',                  item: '印象图',       qty: 1, ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '印象图评估',                                  days: 1, ownerRule: 'reviewer_p2', reviewerRule: '' }
+        { type: 'make',   name: '角色卡文学设定',          item: '角色卡文学设定', qty: 1, litRole: true, ownerRule: 'worker' },
+        { type: 'review', name: '文学评审',                     daysMin: 1, daysMax: 1, ownerRule: 'reviewer' },
+        { type: 'make',   name: '印象图',                  item: '印象图',       qty: 1, ownerRule: 'worker' },
+        { type: 'review', name: '印象图评估',                                  daysMin: 1, daysMax: 1, ownerRule: 'reviewer' }
       ]
     },
     'lit-simple': {
       name: '简单补充设定',
       nodes: [
-        { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '评审',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' }
+        { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker' },
+        { type: 'review', name: '评审',                         daysMin: 1, daysMax: 1, ownerRule: 'reviewer' }
       ]
     },
     'lit-system': {
       name: '系统文学设定',
       nodes: [
-        { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker',     reviewerRule: '' },
-        { type: 'review', name: '评审',                         days: 1, ownerRule: 'reviewer_p0', reviewerRule: '' }
+        { type: 'make',   name: '场景文学设定',        litExpand: true,      ownerRule: 'worker' },
+        { type: 'review', name: '评审',                         daysMin: 1, daysMax: 1, ownerRule: 'reviewer' }
       ]
     }
   },
@@ -1266,33 +1187,34 @@ function formatItemTime(t) {
   return `${t.min}~${t.max} ${t.unit}/${t.per}`;
 }
 
-// 工时表工期「类型」：大中小 / 范围 / 模式 / 空（固定天数节点没有 item）
+// 工时表工期「类型」：大中小 / 模式 / 角色卡 / 范围
+// v70：不再有「固定」这一档 —— 没有 item 的节点也用 min~max 区间描述（固定 1 天 = 1~1）
 function itemTimeKind(itemName) {
   const t = getItemTable()[itemName];
-  if (!t) return '';
+  if (!t) return '范围';
   if (t.modes) return '模式';
   if (t.cardKinds) return '角色卡';
   if (t.sizes) return '大中小';
-  if (t.min != null) return '范围';
-  return '';
+  return '范围';
 }
-// 工时表工期「文本」：大中小→"大7/中5"；范围→"3~5"；模式→"整组开发30 / 单角色7"
+// 工时表工期「文本」：大中小→"大7~7/中5~5"；范围→"3~5"；模式→"整组开发30~30 / 单角色6~8"
+// v70：全部统一成min~max 形态，单值也写成 "3~3"
 function itemTimeText(itemName) {
   const t = getItemTable()[itemName];
-  if (!t) return '—';
+  if (!t) return '1~1';
   if (t.modes) {
-    return Object.entries(t.modes).map(([k, v]) => `${k}${v.min === v.max ? v.min : v.min + '~' + v.max}`).join(' / ');
+    return Object.entries(t.modes).map(([k, v]) => `${k}${v.min}~${v.max}`).join(' / ');
   }
   if (t.cardKinds) {
-    return Object.entries(t.cardKinds).map(([k, v]) => `${kindLabel(k)}·${v.min === v.max ? v.min : v.min + '~' + v.max}`).join(' / ');
+    return Object.entries(t.cardKinds).map(([k, v]) => `${kindLabel(k)}·${v.min}~${v.max}`).join(' / ');
   }
   if (t.sizes) {
-    return Object.entries(t.sizes).map(([k, v]) => `${k}${v}`).join('/');
+    return Object.entries(t.sizes).map(([k, v]) => `${k}${v}~${v}`).join(' / ');
   }
   if (t.min != null) {
-    return t.min === t.max ? `${t.min}` : `${t.min}~${t.max}`;
+    return `${t.min}~${t.max != null ? t.max : t.min}`;
   }
-  return '—';
+  return '1~1';
 }
 // v69: 角色卡文学设定「按角色子类选档」辅助
 function kindLabel(k) {
@@ -1325,6 +1247,43 @@ function daysBadgeStyle(kind) {
   if (kind === '范围')   return 'background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;';
   if (kind === '模式')   return 'background:#F5F3FF;color:#6D28D9;border:1px solid #DDD6FE;';
   return 'background:#F3F4F6;color:#374151;border:1px solid #E5E7EB;'; // 固定
+}
+
+// ============ 工时统一为「范围」表示 ============
+// 用户规则（v70）：所有节点的工时都用min~max 区间描述，不再有「固定单值」这种形态；
+//固定 1 天 == 范围 1~1。这样设置界面只有一种输入方式，语义也统一。
+// 兼容策略（不破坏历史数据）：
+//   · 新格式：节点上写 { daysMin, daysMax }
+//   · 旧格式：节点上只有 { days } → 视为 daysMin = daysMax = days
+//   · 带item 的节点：区间来自工时表（min/max、sizes、modes、cardKinds），节点上不存
+// 排期取值仍与原来一致 —— 取区间上限（max），保证不缩短工期、行为零变化。
+function nodeDaysRange(node) {
+  if (!node) return { min: 1, max: 1 };
+  if (node.daysMin != null || node.daysMax != null) {
+    var lo = node.daysMin != null ? Number(node.daysMin) : Number(node.daysMax);
+    var hi = node.daysMax != null ? Number(node.daysMax) : Number(node.daysMin);
+    if (!isFinite(lo)) lo = 1;
+    if (!isFinite(hi)) hi = lo;
+    if (hi < lo) { var _t = lo; lo = hi; hi = _t; }   // 手填反了自动纠正
+    return { min: lo, max: hi };
+  }
+  if (node.days != null) { var d = Number(node.days); if (!isFinite(d)) d = 1; return { min: d, max: d }; }
+  return { min: 1, max: 1 };
+}
+// 区间 → 显示文本："1~1" / "0.5~1"（统一都带 ~，让"固定"也看得出是区间）
+function rangeText(r) {
+  if (!r) return '1~1';
+  return r.min + '~' + r.max;
+}
+// 把节点上的 days旧字段就地升级为 daysMin/daysMax（读取旧缓存时调用，幂等）
+function upgradeNodeDaysField(node) {
+  if (!node) return node;
+  if (node.item || node.litBundle || node.litExpand) return node;  // 工时来自工时表，节点上不存区间
+  if (node.daysMin == null && node.daysMax == null && node.days != null) {
+    var d = Number(node.days); if (!isFinite(d)) d = 1;
+    node.daysMin = d; node.daysMax = d;
+  }
+  return node;
 }
 
 // v10: 工时表联动 —— 取某产出物工时的「最大值（范围上限）」（(min,max) 取 max；多档 sizes 按选定档位，未选用"中"或首档；modes 按选定模式的 max）
@@ -1408,10 +1367,10 @@ function buildLitNodes(litList) {
   const bibleItems = litList.filter(function(x){ return x.mid === LIT_MID_UNORDERED; }).map(function(x){ return x.item; });
   const orderedItems = litList.filter(function(x){ return x.mid !== LIT_MID_UNORDERED; });
   if (bibleItems.length) {
-    nodes.push({ type: 'make', name: 'Bible设定', litBundle: bibleItems, litRole: true, ownerRule: 'worker', reviewerRule: '' });
+    nodes.push({ type: 'make', name: 'Bible设定', litBundle: bibleItems, litRole: true, ownerRule: 'worker' });
   }
   orderedItems.forEach(function(x){
-    nodes.push({ type: 'make', name: x.item, item: x.item, qty: 1, litRole: true, ownerRule: 'worker', reviewerRule: '' });
+    nodes.push({ type: 'make', name: x.item, item: x.item, qty: 1, litRole: true, ownerRule: 'worker' });
   });
   return nodes;
 }
@@ -1542,7 +1501,7 @@ function expandedFlowNodes(req, flowNodes) {
     inserts.forEach(({ f, at }) => {
       out.splice(at, 0, {
         type: 'make', name: f.name, item: f.item, qty: 1,
-        litRole: true, ownerRule: 'worker', reviewerRule: '',
+        litRole: true, ownerRule: 'worker',
         forceLit: f.type
       });
     });
@@ -1574,7 +1533,7 @@ function itemRangeLabel(itemName) {
   const t = getItemTable()[itemName];
   if (!t) return '';
   if (t.sizes) { const v = Object.values(t.sizes); return `${Math.min(...v)}-${Math.max(...v)}天`; }
-  return t.min === t.max ? `${t.min}天` : `${t.min}-${t.max}天`;
+  return t.min === t.max ? `${t.min}-${t.max}天` : `${t.min}-${t.max}天`;
 }
 // 计算 flow 节点的实际工期：litBundle → 各项相加；带 item → 最大值×数量（min/max 范围取 max；多档按 sizeChoice）；否则固定 days
 function nodeDays(node, sizeChoice, sizeChoices, modeChoice, req) {
@@ -1596,7 +1555,8 @@ function nodeDays(node, sizeChoice, sizeChoices, modeChoice, req) {
     const qty = node.qty != null ? node.qty : 1;
     return Math.max(1, Math.round(itemMedianDays(node.item, sizeChoice) * qty));
   }
-  return node.days != null ? node.days : 1;
+  // v70：无 item 的节点用 daysMin~daysMax 区间；排期取上限（与原来取 days 行为一致）
+  return Math.max(0, nodeDaysRange(node).max);
 }
 // 流程名 + 工时标注：litBundle → "Bible设定（xxx、yyy）"；多档 "名（中·5天）"；多模式 "名（整组开发·30天）"；单档 "名（3-5天）"
 function nodeDisplayName(node, sizeChoice, modeChoice, req) {
@@ -1623,6 +1583,13 @@ function nodeDisplayName(node, sizeChoice, modeChoice, req) {
     const range = itemRangeLabel(node.item);
     const qtyTxt = (node.qty != null && node.qty !== 1) ? ` ×${node.qty}` : '';
     return `${node.name}（${range}${qtyTxt}）`;
+  }
+  // v71：无 item 的节点（含用户自建环节）也把区间标注上去，
+  // 否则甘特图里只能看到「监修」而看不出它的工时区间是 2~5 —— 与挂产出物的节点表现不一致。
+  // 评审类固定 1 天且嵌入前一环节，标区间没意义，故不加。
+  if (node.type !== 'review') {
+    const r = nodeDaysRange(node);
+    return `${node.name}（${r.min}-${r.max}天）`;
   }
   return node.name;
 }
@@ -1719,10 +1686,13 @@ function loadState() {
         mergedCfg.prioThresholds = mergedCfg.prioThresholds || { ...mergedCfg.thresholds };
         mergedCfg.importanceThresholds = mergedCfg.importanceThresholds || { ...mergedCfg.thresholds };
       }
-      // 配置版本升级：旧缓存的权威数据结构过期时，强制用内置最新版覆盖
+      // 配置版本升级：旧缓存的权威数据结构过期时，用内置最新版覆盖
       // （flows/holidays/pipelines 是照官方表录入的权威数据；用户的 requirements/tasks/headcount/阈值/buffer 保留）
       if ((parsed.config && parsed.config._cfgVersion) !== DEFAULT_CONFIG._cfgVersion) {
-        mergedCfg.flows = DEFAULT_CONFIG.flows;
+        // ⚠️ flows 不能整体覆盖：用户可能在设置里加了自定义环节（如「监修」）并拖过顺序，
+        //    直接覆盖会静默抹掉他的配置。策略：内置节点用最新版（工时/规则是权威数据），
+        //    但把用户自建的节点按相对位置补回去（认领依据：节点名不在内置模板里）。
+        mergedCfg.flows = _mergeUserFlowNodes(parsed.config && parsed.config.flows, DEFAULT_CONFIG.flows);
         mergedCfg.holidays = DEFAULT_CONFIG.holidays;
         mergedCfg.pipelines = DEFAULT_CONFIG.pipelines;
         // 分档阈值也是照"管线组合分值分布"重算的权威数据 → 升级时用内置最新版覆盖
@@ -1731,6 +1701,12 @@ function loadState() {
         mergedCfg._cfgVersion = DEFAULT_CONFIG._cfgVersion;
       }
       state = { ...state, ...parsed, config: mergedCfg };
+      // v70 迁移：把节点上的旧 days 单值字段升级成 daysMin/daysMax 区间（幂等，不影响已是新格式的）
+      // 之所以放在这里而不是靠 _cfgVersion：用户可能没触发版本升级分支（自定义节点保留场景），
+      // 但他的自定义节点仍是老 { days:2 } 格式，编辑器要能正确显示 2~2
+      if (state.config && state.config.flows) {
+        Object.values(state.config.flows).forEach(f => (f.nodes || []).forEach(upgradeNodeDaysField));
+      }
       // 归一化历史需求：补齐缺失的排期字段（specialItems/pipelines/sizeChoices 等），
       //   兼容旧存档，避免老需求因缺字段导致文学不展开/不问大中小
       if (Array.isArray(state.requirements)) state.requirements.forEach(normalizeReq);
@@ -1749,6 +1725,39 @@ function saveState() {
     const toSave = { config: state.config, requirements: state.requirements, tasks: state.tasks };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch (e) { console.error('Save failed', e); }
+}
+
+// 配置版本升级时合并 flows：内置节点取最新版（权威工时/规则），用户自建节点按相对位置补回。
+// 判定「用户自建」= 该节点名不存在于内置模板的同一流程里（内置节点名是稳定的）。
+// 这样我改代码 bump _cfgVersion 时，用户加的「监修」等自定义环节不会被静默抹掉。
+function _mergeUserFlowNodes(oldFlows, defFlows) {
+  const out = JSON.parse(JSON.stringify(defFlows));
+  if (!oldFlows) return out;
+  Object.keys(out).forEach(fid => {
+    const oldNodes = (oldFlows[fid] && oldFlows[fid].nodes) || null;
+    if (!Array.isArray(oldNodes) || !oldNodes.length) return;
+    const defNames = new Set((out[fid].nodes || []).map(n => n.name));
+    // 逐个找用户自建节点，连同它在旧数组里的「前一个内置节点」一起记下来，
+    // 用于在新数组里定位插入点（前驱还在就插它后面，否则退回原下标/末尾）
+    oldNodes.forEach((n, i) => {
+      if (defNames.has(n.name)) return;// 内置节点：跳过，用最新版
+      let anchorName = null;
+      for (let j = i - 1; j >= 0; j--) {
+        if (defNames.has(oldNodes[j].name)) { anchorName = oldNodes[j].name; break; }
+      }
+      const arr = out[fid].nodes;
+      if (arr.some(x => x.name === n.name)) return;  // 已补过（重名保护）
+      let at = arr.length;
+      if (anchorName) {
+        const ai = arr.findIndex(x => x.name === anchorName);
+        if (ai >= 0) at = ai + 1;
+      } else {
+        at = 0;                                      // 旧数组里它前面没有任何内置节点 → 放最前
+      }
+      arr.splice(at, 0, JSON.parse(JSON.stringify(n)));
+    });
+  });
+  return out;
 }
 
 function uuid() { return 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
@@ -2033,10 +2042,9 @@ function runDecisionChain(req) {
 }
 
 // 把 flow 节点里的 ownerRule 解析成实际的人员 id
-// rule: 'worker'        → req.ownerId 优先；否则按人员表 round-robin（按 req.id hash）
-//       'reviewer_p0'   → P0：东哥/总监；当前阶段以 worker 执行（保存到 task.reviewer 显示）
-//       'reviewer_p1'   → P1：场景=庄哥 / 角色=Kuki；同上游
-//       'reviewer_p2'   → P2：场景=Aiko / 角色=飞飞；同上游
+// rule: 'worker'   → 走 pickSeat()（调用方分流，不进本函数）
+//       'reviewer' → 仅为占位/产能记账，真正展示的评审人来自 resolveReqReviewer()
+//                    写进 task.reviewer；本函数只需返回一个稳定的人员 id
 function _stableHash(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
@@ -2083,14 +2091,6 @@ function pickSeat(role, ownerLastEnd, today, seatCache) {
   return bestSeat;
 }
 
-
-// 把 flow 节点里的 reviewerRule + 决策结果解析成"评审人"显示文本
-function resolveReviewerText(rule, decision, category) {
-  if (!rule || !rule.startsWith('reviewer_')) return '';
-  const isChar = category && category.startsWith('char');
-  // 直接读出 rule 里已写的 reviewerRule 节点配置（resolveOwnerText 在 nodes 那一层调用）
-  return ''; // 实际显示用 node.reviewerRule
-}
 
 // ⚠️ 用户规则：整条需求的唯一审核人（内部重要程度总分 → 分级 → 具体人名）
 //   ① 特殊：管线含 bible/region/narrative → 东哥（总监）
@@ -2820,46 +2820,156 @@ function tableToTabText(header, rows) {
   return out.join('\n');
 }
 
-// 读取 csv 文件并解析为 2D 数组（首行表头）
+// 读取 csv / txt 文件并解析为 2D 数组（首行表头）
+// 表头同样保留原始文本（理由见 readXlsxFile注释）
+//
+// ⚠️ 编码问题（真实高频坑）：Excel 在中文 Windows 上「另存为 CSV」默认是 **GBK**，
+//    「另存为 Unicode 文本(.txt)」是 **UTF-16LE**，两者用 UTF-8 硬读都会整片乱码。
+//    这里按 BOM + 启发式嗅探自动选编码，靠 TextDecoder 解码（浏览器原生支持 gbk）。
+function detectTextEncoding(bytes) {
+  if (bytes.length >= 3&& bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) return 'utf-8';        // UTF-8 BOM
+  if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) return 'utf-16le';                // UTF-16 LE BOM
+  if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) return 'utf-16be';                          // UTF-16 BE BOM
+  // 无 BOM 的 UTF-16：判据是「出现大量 0x00 字节」。
+  //   不能只数奇数位的 0x00——那只对纯 ASCII 成立（"1." → 31 00 2E 00）；
+  //   中文占比高时零字节会落到偶数位（LE 下 "需"=U+9700 → 00 97），实测 CJK 表头奇位占比不达标。
+  //   UTF-8 / GBK 的正常文本 0x00 出现率为 0，所以用「总零字节 > 10%」既灵敏又不误伤。
+  const probe = Math.min(bytes.length, 512);
+  let zeroTotal = 0;
+  for (let i = 0; i < probe; i++) if (bytes[i] === 0x00) zeroTotal++;
+  if (probe >= 16 && zeroTotal > probe / 10) {
+    // 区分 LE / BE：找 ASCII 可见字符与 0x00 组成的对。
+    //   LE → ASCII 在偶位、0x00 在奇位；BE → 反之。表格里数字/点/tab/字母很多，样本充足。
+    let le = 0, be = 0;
+    for (let i = 0; i + 1 < probe; i += 2) {
+      const lo = bytes[i], hi = bytes[i + 1];
+      if (hi === 0x00 && lo >= 0x20 && lo <= 0x7E) le++;
+      else if (lo === 0x00 && hi >= 0x20 && hi <= 0x7E) be++;
+    }
+    return be > le ? 'utf-16be' : 'utf-16le';
+  }
+  // 校验是否为合法 UTF-8；不合法则判为 GBK（中文 Windows 下Excel 导出的默认编码）
+  let i = 0;
+  while (i < bytes.length) {
+    const b = bytes[i];
+    if (b < 0x80) { i++; continue; }
+    let need = 0;
+    if (b >= 0xC2 && b <= 0xDF) need = 1;
+    else if (b >= 0xE0 && b <= 0xEF) need = 2;
+    else if (b >= 0xF0 && b <= 0xF4) need = 3;
+    else return 'gbk';
+    if (i + need >= bytes.length) break;
+    for (let k = 1; k <= need; k++) {
+      if ((bytes[i + k] & 0xC0) !== 0x80) return 'gbk';
+    }
+    i += need + 1;
+  }
+  return 'utf-8';
+}
+
 function readCsvFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        let text = e.target.result;
-        // 去掉 UTF-8 BOM
+        const bytes = new Uint8Array(e.target.result);
+        if (!bytes.length) return reject(new Error('文件为空'));
+        const enc = detectTextEncoding(bytes);
+        let text;
+        try {
+          text = new TextDecoder(enc, { fatal: false }).decode(bytes);
+        } catch (decErr) {
+          // 个别环境不认gbk 别名，依次退到 gb18030 / utf-8
+          try { text = new TextDecoder('gb18030', { fatal: false }).decode(bytes); }
+          catch (e2) { text = new TextDecoder('utf-8', { fatal: false }).decode(bytes); }
+        }
+        // 去掉 BOM
         if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
         const { table } = parseTextToTable(text);
-        if (!table.length) return reject(new Error('CSV 文件为空'));
+        if (!table.length) return reject(new Error('文件为空或没有可识别的表格内容'));
         const header = table[0];
         const dataRows = table.slice(1).filter(r => r.some(c => String(c).trim()));
-        resolve({ header, rows: dataRows });
+        if (!dataRows.length) return reject(new Error('只读到表头，没有数据行'));
+        resolve({ header, rows: dataRows, encoding: enc });
       } catch (err) { reject(err); }
     };
     reader.onerror = () => reject(reader.error || new Error('读取失败'));
-    reader.readAsText(file, 'UTF-8');
+    reader.readAsArrayBuffer(file);   // 读字节而非直接 readAsText，才能自己决定编码
   });
 }
 
 // 读取 xlsx 文件并解析为 2D 数组（首行表头）
+// ⚠️ 关键：表头必须保留【原始文本】（带 "1." 编号、带 ":[Bible设定] xxx" 后缀），
+//    因为 parseQuestionnaireMultiCol 依赖编号识别表头行、依赖方括号后缀提取矩阵列项名。
+//    早期版本在这里做了 normalizeHeader()，导致 detectQuestionnaireFormat 判成 simple
+//    → 静默降级到 parseSimple → xlsx 只能解析出 1 条残缺记录。csv 路径没做normalize 所以一直正常。
 function readXlsxFile(file) {
   return new Promise((resolve, reject) => {
-    if (typeof XLSX === 'undefined') return reject(new Error('SheetJS 未加载，请检查网络'));
+    if (typeof XLSX === 'undefined') return reject(new Error('SheetJS 未加载，请检查 xlsx-js-style.min.js 是否与 HTML 在同一目录'));
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result);
-        const wb = XLSX.read(data, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
-        if (!aoa.length) return reject(new Error('xlsx 文件为空'));
-        const header = aoa[0].map(h => normalizeHeader(h));
-        const dataRows = aoa.slice(1).filter(r => r.some(c => String(c).trim()));
-        resolve({ header, rows: dataRows });
-      } catch (err) { reject(err); }
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+        if (!wb.SheetNames || !wb.SheetNames.length) return reject(new Error('xlsx 里没有工作表'));
+        // 多Sheet：挑「数据行最多」的那个（腾讯问卷偶尔把说明放在第一个 Sheet）
+        // raw:true + cellDates:true → 日期列拿到真正的 Date 对象；若用 raw:false，
+        // SheetJS 会按单元格格式渲染成 "12/31/26" 这类本地化字符串，后续无法可靠解析。
+        let best = null;
+        wb.SheetNames.forEach(nm => {
+          const ws = wb.Sheets[nm];
+          if (!ws) return;
+          const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true, blankrows: false });
+          const nonEmpty = aoa.filter(r => r.some(c => String(c).trim()));
+          if (!best || nonEmpty.length > best.rows.length) best = { name: nm, rows: nonEmpty };
+        });
+        if (!best || best.rows.length < 2) return reject(new Error('xlsx 内容为空或只有表头'));
+
+        let aoa = best.rows;
+        // 去掉整列都空的尾列（问卷导出常带若干空列，会打乱「按列数对齐」的解析策略）
+        let lastUsed = -1;
+        aoa.forEach(r => { for (let i = r.length - 1; i >= 0; i--) { if (String(r[i]).trim()) { if (i > lastUsed) lastUsed = i; break; } } });
+        if (lastUsed >= 0) aoa = aoa.map(r => r.slice(0, lastUsed + 1));
+
+        const header = aoa[0].map(h => String(h == null ? '' : h).trim());   // 原始表头，不做 normalize
+        const dataRows = aoa.slice(1).map(r => r.map(c => xlsxCellToText(c)));
+        resolve({ header, rows: dataRows, sheetName: best.name });      } catch (err) { reject(err); }
     };
     reader.onerror = () => reject(reader.error || new Error('读取失败'));
     reader.readAsArrayBuffer(file);
+  });
+}
+
+// xlsx 单元格 → 文本。日期统一成 YYYY-MM-DD，避免 Excel 把 DDL 渲染成 "12/31/26" 之类
+function xlsxCellToText(c) {
+  if (c == null) return '';
+  if (c instanceof Date && !isNaN(c)) {
+    //⚠️ SheetJS 由 Excel 序列号还原 Date 时有浮点误差，常见结果是
+    //2026-12-31 变成 "2026-12-30T15:59:59.999Z"（本地/UTC 直读都会少一天）。
+    //    所以按「距离最近的整天」四舍五入，再用 UTC 字段格式化。
+    const rounded = new Date(Math.round(c.getTime() / 86400000) * 86400000);
+    const p = n => (n < 10 ? '0' + n : '' + n);
+    return rounded.getUTCFullYear() + '-' + p(rounded.getUTCMonth() + 1) + '-' + p(rounded.getUTCDate());
+  }
+  return String(c).replace(/\r/g, '').trim();
+}
+
+// 读文件头几个字节，判断真实格式（不信后缀名）
+// 用户经常把 xlsx 改名成 .xls，或者把「网页表格」另存成 .xls（其实是 HTML）
+function sniffFileKind(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const b = new Uint8Array(e.target.result);
+      //ZIP 头"PK\x03\x04" → xlsx / xlsm（OOXML 本质是 zip）
+      if (b.length >= 4 && b[0] === 0x50 && b[1] === 0x4B && b[2] === 0x03 && b[3] === 0x04) return resolve('xlsx');
+      // OLE2/CFB 头 →老 xls（Excel 97-2003 二进制）
+      if (b.length >= 8 && b[0] === 0xD0 && b[1] === 0xCF && b[2] === 0x11 && b[3] === 0xE0) return resolve('xls');
+      // 其余按文本处理（csv / txt / 伪装成 xls 的 HTML 表格）
+      resolve('text');
+    };
+    reader.onerror = () => resolve('text');
+    reader.readAsArrayBuffer(file.slice(0, 8));
   });
 }
 
@@ -2870,30 +2980,55 @@ async function handleAiFile(file) {
   info.style.display = 'flex';
   info.innerHTML = `<span>⏳</span><span>正在解析 ${escapeHtml(file.name)}…</span>`;
   try {
-    let result;
-    if (ext === 'xlsx' || ext === 'xls') {
-      result = await readXlsxFile(file);
-    } else if (ext === 'csv') {
-      result = await readCsvFile(file);
-    } else {
-      throw new Error('不支持的文件类型：' + ext);
+    if (!file.size) throw new Error('文件是空的');
+    if (file.size > 5 * 1024 * 1024) throw new Error('文件超过 5MB，请先精简');
+
+    const ALLOW = ['xlsx', 'xls', 'xlsm', 'csv', 'txt', 'tsv'];
+    if (ALLOW.indexOf(ext) < 0) {
+      throw new Error('不支持的文件类型：.' + ext + '（支持 ' + ALLOW.map(x => '.' + x).join(' / ') + '）');
     }
+
+    // 按【真实内容】而非后缀分派：解决 "xlsx 改名成 .xls"、"HTML 表格存成 .xls" 等情况
+    const kind = await sniffFileKind(file);
+    let result;
+    if (kind === 'xlsx' || kind === 'xls') {
+      result = await readXlsxFile(file);
+    } else {
+      //纯文本：csv / txt / tsv（自动嗅探 UTF-8 / GBK / UTF-16 与tab/逗号分隔）
+      result = await readCsvFile(file);
+    }
+    // 后缀与真实格式不符时提示一下，避免用户以为解析错了
+    const extIsBinary = (ext === 'xlsx' || ext === 'xls' || ext === 'xlsm');
+    const kindIsBinary = (kind === 'xlsx' || kind === 'xls');
+    if (extIsBinary !== kindIsBinary) {
+      toast(`注意：文件后缀是 .${ext}，但实际内容是${kindIsBinary ? ' Excel 二进制' : '纯文本'}格式，已按实际内容解析`, 'warn');
+    }
+
+    const sheetTip = result.sheetName ? `Sheet: ${escapeHtml(result.sheetName)} · ` : '';
+    const encTip = (result.encoding && result.encoding !== 'utf-8') ? `${result.encoding.toUpperCase()} · ` : '';
     info.innerHTML = `
       <span>📄</span>
       <span><b>${escapeHtml(file.name)}</b></span>
-      <span class="text-muted text-sm">${result.rows.length} 行 × ${result.header.length} 列 · ${(file.size / 1024).toFixed(1)} KB</span>
+      <span class="text-muted text-sm">${sheetTip}${encTip}${result.rows.length} 行 × ${result.header.length} 列 · ${(file.size / 1024).toFixed(1)} KB</span>
       <span class="ai-file-remove" id="aiFileRemove" title="移除">✕</span>
     `;
     document.getElementById('aiFileRemove').onclick = () => {
       info.style.display = 'none';
       document.getElementById('aiFileInput').value = '';
     };
-    // 把 2D 数组转成 tab 分隔文本，交给 aiParseAndFill 自动填表
+    // 把 2D 数组转成tab 分隔文本，交给 aiParseAndFill 自动填表
     const tabText = tableToTabText(result.header, result.rows);
     // 同步把原始文本也回填到 pasteInput，方便用户看/编辑
     document.getElementById('pasteInput').value = tabText;
+
+    // 提前探测格式：若识别不出多列问卷结构，明确告知用户（而不是静默降级成 1 条残缺记录）
+    const fmt = detectQuestionnaireFormat(tabText);
     aiParseAndFill(tabText);
-    toast(`已解析 ${result.rows.length} 条，自动填到右侧`, 'success');
+    if (fmt === 'multi-col') {
+      toast(`已解析 ${result.rows.length} 条，自动填到右侧`, 'success');
+    } else {
+      toast(`已读到 ${result.rows.length} 行，但未识别出问卷多列结构，已按简单模式解析，请核对右侧字段`, 'warn');
+    }
   } catch (err) {
     info.innerHTML = `<span style="color:#d44;">❌</span><span>解析失败：${escapeHtml(err.message)}</span>`;
     toast('文件解析失败：' + err.message, 'error');
@@ -2920,8 +3055,10 @@ const QUESTIONNAIRE_HEADER_MAP = {
   '已有产出物': 'assetsCombined',     // 兼容单字段汇总
   '文学已有产出具体项': 'assetsLitItem', // 新格式: 每列一个 item (checkbox)
   '美术已有产出具体项': 'assetsArtItem', // 新格式: 自由文本 "F.[场景原画] 概念图"
-  '是否有特殊产出需求': 'specialCategories', // 新格式: 哪些 mid 有特殊需求
-  '特殊产出需求': 'specialItems',     // 新格式: 具体特殊需求项
+  '是否有特殊产出需求': 'specialCategories', // 旧格式: 哪些 mid 有特殊需求
+  '选做产出项': 'specialCategories',        // 新题名（问卷 Q11）：Bible设定（文学）/场景原画（美术）/无
+  '特殊产出需求': 'specialItems',     // 旧格式: 具体特殊需求项
+  '选做产出需求': 'specialItems',     // 新题名（问卷 Q12）：每列一个 item (checkbox)
   'DDL': 'ddl',
   '截止日期': 'ddl',
   '其他需求描述': 'desc',
@@ -3275,9 +3412,27 @@ function parseCopyInfo(text) {
 // v44: 统一 DDL 为 YYYY-MM-DD（兼容 2026/9/30 与 2026-09-30）
 function normalizeDDL(s) {
   if (!s) return '';
-  const m = String(s).match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  let t = String(s).trim();
+  if (!t) return '';
+  // 已是标准格式
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  //去掉时间部分（xlsx 日期单元格常带 " 00:00:00"）
+  t = t.replace(/[ T]\d{1,2}:\d{2}(:\d{2})?.*$/, '').trim();
+  // YYYY/M/D、YYYY-M-D、YYYY.M.D、YYYY年M月D日
+  let m = t.match(/^(\d{4})\s*[\/\-.年]\s*(\d{1,2})\s*[\/\-.月]\s*(\d{1,2})\s*日?$/);
   if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
-  return String(s).trim();
+  // Excel 序列号（1900 起算，如 46022）——问卷导出偶发
+  if (/^\d{5}$/.test(t)) {
+    const n = parseInt(t, 10);
+    if (n > 20000 && n < 80000) {
+      const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
+      if (!isNaN(d)) {
+        const p = x => (x < 10 ? '0' + x : '' + x);
+        return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate());
+      }
+    }
+  }
+  return t;
 }
 
 // 解析腾讯问卷多列格式
@@ -3363,6 +3518,10 @@ function parseQuestionnaireMultiCol(text) {
       } else if (key === 'copyInfo') {
         // "15.需求副本信息" → "1jjj,2026-12-05"（名称,DDL；多个副本用 ; 或换行分隔）
         rec.copyInfo = raw;
+      } else if (key === 'ddl') {
+        // 主需求 DDL 也要归一化：xlsx 日期单元格/问卷可能给 "2026/9/30"、"2026年9月30日"、
+        // "12/31/26"、Excel 序列号等，不归一化会导致后续日期比较与超DDL 判定失效。
+        rec.ddl = normalizeDDL(stripMatrixPrefix(raw));
       } else {
         rec[key] = stripMatrixPrefix(raw);
       }
@@ -3777,86 +3936,11 @@ function clearPendingQueue() {
   toast('已清空队列', 'info');
 }
 
-/* =========================================================================
-   批量导入（粘贴 / xlsx / csv / txt）- 统一入口
-   ========================================================================= */
-
-// 目标字段列表（与字段映射下拉框选项一致）
-const IMPORT_TARGET_FIELDS = [
-  { value: '_skip', label: '— 不导入 —' },
-  { value: 'name', label: '需求名' },
-  { value: 'bigCategory', label: '分类大类（场景类/角色类/纯文学类）' },
-  { value: 'subScene', label: '场景子分类' },
-  { value: 'subChar', label: '角色子分类' },
-  { value: 'subLit', label: '文学子分类' },
-  { value: 'ddl', label: 'DDL / 截止日期' },
-  { value: 'requester', label: '提需人 / 负责人' },
-  { value: 'pipelines', label: '应用管线（多选）' },
-  { value: 'assetsBig', label: '已有产出大类（多选）' },
-  { value: 'assetsMid', label: '已有产出二级分类（多选）' },
-  { value: 'assetsItem', label: '已有产出具体项（多选）' },
-  { value: 'assetsCombined', label: '已有产出物（旧版单字段）' },
-  { value: 'desc', label: '描述 / 其他需求描述' }
-];
-
-// 字段名 → 目标字段 的智能猜测（关键词匹配）
-const FIELD_GUESS_RULES = [
-  { keys: ['需求名称', '需求名', '需求'], target: 'name' },
-  { keys: ['需求分类', '分类大类', '大类'], target: 'bigCategory' },
-  { keys: ['场景子分类', '场景子类'], target: 'subScene' },
-  { keys: ['角色子分类', '角色子类'], target: 'subChar' },
-  { keys: ['文学子分类', '文学子类'], target: 'subLit' },
-  { keys: ['DDL', '截止日期', '交付日期', '完成时间'], target: 'ddl' },
-  { keys: ['提需人', '提单人', '负责人', '需求方'], target: 'requester' },
-  { keys: ['需求应用与露出矩阵', '应用与露出', '应用管线', '管线', '露出'], target: 'pipelines' },
-  { keys: ['已有产出大类', '产出大类', '产出类型'], target: 'assetsBig' },
-  { keys: ['已有产出二级', '产出二级', '产出中类'], target: 'assetsMid' },
-  { keys: ['已有产出具体项', '已有产出', '产出具体', '具体产出'], target: 'assetsItem' },
-  { keys: ['其他需求描述', '需求描述', '补充说明', '备注', '描述'], target: 'desc' }
-];
-
-function guessField(headerText) {
-  const h = String(headerText || '').trim();
-  if (!h) return '_skip';
-  for (const rule of FIELD_GUESS_RULES) {
-    if (rule.keys.some(k => h.includes(k))) return rule.target;
-  }
-  return '_skip';
-}
 
 // 导入弹窗的全局状态
-const importState = {
-  rows: [],        // 解析后的二维数组（不含表头）
-  header: [],      // 表头
-  mapping: [],     // 每列对应的目标字段
-  currentFile: null
-};
 
-function openImportModal() {
-  importState.rows = [];
-  importState.header = [];
-  importState.mapping = [];
-  importState.currentFile = null;
-  document.getElementById('importPasteText').value = '';
-  document.getElementById('importFileInfo').innerHTML = '';
-  document.getElementById('importMappingArea').style.display = 'none';
-  document.getElementById('importPreviewArea').style.display = 'none';
-  document.getElementById('importStatus').textContent = '未开始';
-  document.getElementById('importConfirm').disabled = true;
-  document.getElementById('importConfirm').textContent = '导入 0 条';
-  document.getElementById('importPasteInfo').textContent = '等待粘贴…';
-  switchImportTab('paste');
-  document.getElementById('importModal').classList.remove('hidden');
-}
 
-function switchImportTab(name) {
-  document.querySelectorAll('.import-tab').forEach(t => t.classList.toggle('active', t.dataset.importTab === name));
-  document.querySelectorAll('.import-panel').forEach(p => p.classList.toggle('active', p.id === 'importPanel-' + name));
-}
 
-function closeImportModal() {
-  document.getElementById('importModal').classList.add('hidden');
-}
 
 // 把任意纯文本解析成二维数组（tab/逗号分隔）
 function parseTextToTable(text) {
@@ -3888,292 +3972,8 @@ function parseTextToTable(text) {
   return { table, sep };
 }
 
-function applyImportData(headerCells, dataRows) {
-  importState.header = headerCells;
-  importState.rows = dataRows;
-  importState.mapping = headerCells.map(h => guessField(h));
-  renderMappingTable();
-  renderPreviewTable();
-  document.getElementById('importMappingArea').style.display = 'block';
-  document.getElementById('importPreviewArea').style.display = 'block';
-  updateImportConfirmBtn();
-}
 
-function renderMappingTable() {
-  const tbl = document.getElementById('importMappingTable');
-  let html = '<thead><tr><th style="width:60px;">#</th><th>原始表头</th><th>样例</th><th style="width:240px;">→ 目标字段</th></tr></thead><tbody>';
-  importState.header.forEach((h, i) => {
-    const sample = (importState.rows[0] || [])[i] || '';
-    html += `<tr>
-      <td>${i + 1}</td>
-      <td class="col-name" title="${escapeHtml(h)}">${escapeHtml(h) || '<span class="text-muted">空</span>'}</td>
-      <td class="col-sample" title="${escapeHtml(sample)}">${escapeHtml(sample) || '<span class="text-muted">无</span>'}</td>
-      <td><select data-mapping-idx="${i}">
-        ${IMPORT_TARGET_FIELDS.map(f => `<option value="${f.value}" ${importState.mapping[i] === f.value ? 'selected' : ''}>${f.label}</option>`).join('')}
-      </select></td>
-    </tr>`;
-  });
-  html += '</tbody>';
-  tbl.innerHTML = html;
-  tbl.querySelectorAll('select[data-mapping-idx]').forEach(sel => {
-    sel.onchange = (e) => {
-      importState.mapping[+e.target.dataset.mappingIdx] = e.target.value;
-      renderPreviewTable();
-      updateImportConfirmBtn();
-    };
-  });
-}
 
-function renderPreviewTable() {
-  const tbl = document.getElementById('importPreviewTable');
-  // 只显示被映射的列
-  const visibleCols = importState.mapping.map((m, i) => m === '_skip' ? -1 : i).filter(i => i >= 0);
-  if (!visibleCols.length) {
-    tbl.innerHTML = '<thead><tr><th>提示</th></tr></thead><tbody><tr><td class="text-muted">所有列都未映射，请至少为「需求名」选一个字段</td></tr></tbody>';
-    document.getElementById('importPreviewInfo').textContent = '0 行预览';
-    return;
-  }
-  const labels = visibleCols.map(i => ({ idx: i, header: importState.header[i] || '', target: importState.mapping[i] }));
-  let html = '<thead><tr>' + labels.map(l => `<th><span class="col-tag">${escapeHtml(l.target)}</span>${escapeHtml(l.header)}</th>`).join('') + '</tr></thead><tbody>';
-  importState.rows.slice(0, 50).forEach(row => {
-    const nameCol = importState.mapping.indexOf('name');
-    const invalid = nameCol >= 0 && !(row[nameCol] || '').trim();
-    html += '<tr' + (invalid ? ' class="invalid"' : '') + '>';
-    labels.forEach(l => {
-      html += `<td title="${escapeHtml(row[l.idx] || '')}">${escapeHtml(row[l.idx] || '')}</td>`;
-    });
-    html += '</tr>';
-  });
-  if (importState.rows.length > 50) html += `<tr><td colspan="${labels.length}" class="text-muted text-sm" style="text-align:center;">还有 ${importState.rows.length - 50} 行未显示</td></tr>`;
-  html += '</tbody>';
-  tbl.innerHTML = html;
-  document.getElementById('importPreviewInfo').textContent = `${importState.rows.length} 行 × ${visibleCols.length} 列（最多预览 50 行）`;
-}
-
-function updateImportConfirmBtn() {
-  // 至少需要 name 列才有意义
-  const hasName = importState.mapping.includes('name');
-  const validRows = importState.rows.filter(row => {
-    const nameIdx = importState.mapping.indexOf('name');
-    return nameIdx >= 0 && (row[nameIdx] || '').trim();
-  });
-  const btn = document.getElementById('importConfirm');
-  btn.disabled = !hasName || validRows.length === 0;
-  btn.textContent = `导入 ${validRows.length} 条`;
-  document.getElementById('importStatus').textContent = !hasName ? '⚠ 请把"需求名"字段映射上' : `准备导入 ${validRows.length} 条`;
-}
-
-// 解析粘贴文本
-function handleImportParsePaste() {
-  const raw = document.getElementById('importPasteText').value;
-  if (!raw.trim()) { toast('请先粘贴内容', 'warn'); return; }
-  const hasHeader = document.getElementById('importHasHeader').checked;
-  const { table } = parseTextToTable(raw);
-  if (!table.length) { toast('未解析到有效数据', 'warn'); return; }
-  const header = hasHeader ? table[0].map(h => normalizeHeader(h)) : table[0].map((_, i) => `列${i + 1}`);
-  const dataRows = hasHeader ? table.slice(1) : table;
-  if (!dataRows.length) { toast('除表头外没有数据行', 'warn'); return; }
-  document.getElementById('importPasteInfo').textContent = `已解析 ${dataRows.length} 行 × ${header.length} 列`;
-  applyImportData(header, dataRows);
-  toast(`解析成功：${dataRows.length} 行`, 'success');
-}
-
-// 解析文件（xlsx/csv/txt）
-function handleImportFile(file) {
-  if (!file) return;
-  importState.currentFile = file;
-  const ext = (file.name.split('.').pop() || '').toLowerCase();
-  const showInfo = (msg) => {
-    document.getElementById('importFileInfo').innerHTML = `
-      <div class="import-file-info">
-        📄 <span class="file-name">${escapeHtml(file.name)}</span>
-        <span class="file-meta">${(file.size / 1024).toFixed(1)} KB · ${ext.toUpperCase()}</span>
-        <span class="text-sm text-muted">${msg}</span>
-        <span class="file-remove" id="importFileRemove" title="移除">✕</span>
-      </div>
-    `;
-    document.getElementById('importFileRemove').onclick = () => {
-      importState.currentFile = null;
-      document.getElementById('importFileInfo').innerHTML = '';
-      document.getElementById('importMappingArea').style.display = 'none';
-      document.getElementById('importPreviewArea').style.display = 'none';
-      document.getElementById('importConfirm').disabled = true;
-      document.getElementById('importStatus').textContent = '未开始';
-    };
-  };
-  if (ext === 'xlsx' || ext === 'xls') {
-    if (typeof XLSX === 'undefined') { toast('SheetJS 未加载，请检查网络', 'error'); return; }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const wb = XLSX.read(data, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
-        if (!aoa.length) { toast('xlsx 文件为空', 'warn'); return; }
-        const hasHeader = document.getElementById('importHasHeader').checked;
-        const header = hasHeader ? aoa[0].map(h => normalizeHeader(h)) : aoa[0].map((_, i) => `列${i + 1}`);
-        const dataRows = hasHeader ? aoa.slice(1) : aoa;
-        showInfo(`Sheet: ${wb.SheetNames[0]} · ${dataRows.length} 行 × ${header.length} 列`);
-        applyImportData(header, dataRows);
-        toast(`xlsx 解析成功：${dataRows.length} 行`, 'success');
-      } catch (err) {
-        toast('xlsx 解析失败：' + err.message, 'error');
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  } else if (ext === 'csv' || ext === 'txt') {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      const { table } = parseTextToTable(text);
-      if (!table.length) { toast('文件为空', 'warn'); return; }
-      const hasHeader = document.getElementById('importHasHeader').checked;
-      const header = hasHeader ? table[0].map(h => normalizeHeader(h)) : table[0].map((_, i) => `列${i + 1}`);
-      const dataRows = hasHeader ? table.slice(1) : table;
-      showInfo(`${dataRows.length} 行 × ${header.length} 列`);
-      applyImportData(header, dataRows);
-      toast(`${ext.toUpperCase()} 解析成功：${dataRows.length} 行`, 'success');
-    };
-    reader.readAsText(file, 'UTF-8');
-  } else {
-    toast('不支持的文件类型：' + ext, 'warn');
-  }
-}
-
-// 真正导入：根据 mapping 把 rows 转成 requirement，存到 state.requirements
-function doImport() {
-  const nameIdx = importState.mapping.indexOf('name');
-  if (nameIdx < 0) { toast('请先把"需求名"字段映射上', 'warn'); return; }
-  const validRows = importState.rows.filter(row => (row[nameIdx] || '').trim());
-  if (!validRows.length) { toast('没有有效数据', 'warn'); return; }
-
-  // 类别解析工具
-  const resolveCat = (big, subScene, subChar, subLit) => {
-    if (big === '场景类' && subScene) return CATEGORY_TREE['场景类'][subScene] || 'scene-story';
-    if (big === '角色类' && subChar) return CATEGORY_TREE['角色类'][subChar] || 'char-key';
-    if (big === '纯文学类' && subLit) {
-      const direct = CATEGORY_TREE['纯文学类'][subLit];
-      if (direct) return direct;
-      const keys = Object.keys(CATEGORY_TREE['纯文学类'] || {});
-      const found = keys.find(k => subLit.indexOf(k) === 0);
-      return found ? CATEGORY_TREE['纯文学类'][found] : 'lit-simple';
-    }
-    if (big === '场景类') return 'scene-story';
-    if (big === '角色类') return 'char-key';
-    if (big === '纯文学类') return 'lit-simple';
-    return null;
-  };
-
-  // 行 → req
-  const colVal = (row, target) => {
-    const idx = importState.mapping.indexOf(target);
-    if (idx < 0) return null;
-    return (row[idx] || '').trim();
-  };
-
-  const newReqs = [];
-  const errors = [];
-  validRows.forEach((row, i) => {
-    try {
-      const name = colVal(row, 'name');
-      // ⚠️ 腾讯问卷导出的分类/子类值常带 "A."/"B." 选项前缀（如 "C.纯文学类"、"B.系统性设定（如：区域概念）"），
-      //    必须像 parseQuestionnaireMultiCol 那样先去前缀，否则 resolveCat 精确匹配会 miss → 错归到 scene-story。
-      const big = stripMatrixPrefix(colVal(row, 'bigCategory'));
-      const subS = stripMatrixPrefix(colVal(row, 'subScene'));
-      const subC = stripMatrixPrefix(colVal(row, 'subChar'));
-      const subL = stripMatrixPrefix(colVal(row, 'subLit'));
-      const category = resolveCat(big, subS, subC, subL) || 'scene-story';
-      const ddl = colVal(row, 'ddl') || '';
-      const requester = colVal(row, 'requester') || '';
-      const desc = colVal(row, 'desc') || '';
-
-      // 管线
-      const rawPipes = colVal(row, 'pipelines');
-      const pipelines = rawPipes ? splitMulti(rawPipes) : [];
-      // 如果没有"管线"列，再看大类映射管线（兜底）
-      const pipeIds = resolvePipelineIds(pipelines);
-
-      // 产出物：3 级字段是细化关系，最细优先（具体项 > 二级分类 > 大类）
-      // 用 splitAssets 解析，支持 "[场景原画] 概念方向草图" 格式
-      let assets = [];
-      const aItem = splitAssets(colVal(row, 'assetsItem') || '');
-      const aMid = splitAssets(colVal(row, 'assetsMid') || '');
-      const aBig = splitAssets(colVal(row, 'assetsBig') || '').filter(b => !/^无/.test(b));
-      const aCombined = colVal(row, 'assetsCombined');
-      if (aItem.length) {
-        assets = expandAssetTokens(aItem);
-      } else if (aMid.length) {
-        assets = expandAssetTokens(aMid);
-      } else if (aBig.length) {
-        assets = expandAssetTokens(aBig);
-      } else if (aCombined) {
-        // 兼容老格式
-        if (aCombined === '无' || aCombined === '无任何图') assets = [];
-        else if (aCombined === '已有概念图') assets = ['概念图'];
-        else if (aCombined === '已有文学') assets = ['世界特点总述'];
-        else assets = expandAssetTokens(splitMulti(aCombined));
-      }
-
-      // 负责人（按提需人猜）
-      const ownerMatch = state.config.people.find(p => p.name === requester);
-      const ownerId = ownerMatch ? ownerMatch.id : (state.config.people[0]?.id || '');
-
-      // 如果管线为空，根据分类兜底
-      if (!pipeIds.length) {
-        const fallback = state.config.pipelines.find(p => {
-          if (category.startsWith('scene')) return ['hero', 'bible', 'region', 'narrative'].includes(p.id);
-          if (category.startsWith('char')) return ['hero', 'cg', 'pv'].includes(p.id);
-          if (category.startsWith('lit')) return ['bible', 'narrative'].includes(p.id);
-          return false;
-        });
-        if (fallback) pipeIds.push(fallback.id);
-      }
-
-      // 特殊需求（选做文学/美术项）——❗此前遗漏，导致"映射导入"路径的需求丢失勾选的 Bible 等特殊项
-      const rawSpecial = colVal(row, 'specialItems');
-      const specialItems = rawSpecial ? expandAssetTokens(splitMulti(rawSpecial)) : [];
-
-      // 计算 priority（基于"内部重要程度"，用 importanceThresholds；兼容旧 thresholds）
-      const importanceScore = pipeIds.reduce((s, id) => s + (state.config.pipelines.find(p => p.id === id)?.importance || 0), 0);
-      const itImp = state.config.importanceThresholds || state.config.thresholds;
-      let priority = 'P2';
-      if (importanceScore >= itImp.P0) priority = 'P0';
-      else if (importanceScore >= itImp.P1) priority = 'P1';
-
-      const req = normalizeReq({
-        id: uuid(),
-        name,
-        category,
-        ddl,
-        requester,
-        ownerId,
-        hasAssets: assets,
-        pipelines: pipeIds,
-        specialItems,
-        assets: assets.length === 0 ? 'none' : (assets.some(a => /设定|事件|剧情|角色卡|区域|场景|道具/.test(a)) ? 'literature' : 'concept'),
-        desc,
-        priority,
-        createdAt: new Date().toISOString()
-      });
-      newReqs.push(req);
-    } catch (err) {
-      errors.push(`第 ${i + 1} 行：${err.message}`);
-    }
-  });
-
-  if (!newReqs.length) { toast('没有可导入的数据：' + errors.join('; '), 'error'); return; }
-  state.requirements.push(...newReqs);
-  saveState();
-  renderRequirementPool();
-  document.getElementById('importStatus').textContent = `✓ 已导入 ${newReqs.length} 条到需求池${errors.length ? `（${errors.length} 条失败）` : ''}`;
-  toast(`已导入 ${newReqs.length} 条需求到需求池`, 'success');
-  // 关闭弹窗并跳到需求池
-  setTimeout(() => {
-    closeImportModal();
-    switchView('pool');
-  }, 800);
-}
 
 function escapeHtml(s) {
   return String(s == null ? '' : s)
@@ -4181,45 +3981,6 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function bindImportFeature() {
-  // 打开
-  document.getElementById('btnImportData').onclick = openImportModal;
-  // 关闭
-  document.getElementById('importClose').onclick = closeImportModal;
-  document.getElementById('importCancel').onclick = closeImportModal;
-  // Tab 切换
-  document.querySelectorAll('.import-tab').forEach(t => t.onclick = () => switchImportTab(t.dataset.importTab));
-  // 粘贴解析
-  document.getElementById('importPasteBtn').onclick = handleImportParsePaste;
-  // 拖文件
-  const dz = document.getElementById('dropZone');
-  const fi = document.getElementById('importFileInput');
-  dz.onclick = () => fi.click();
-  dz.ondragover = (e) => { e.preventDefault(); dz.classList.add('dragover'); };
-  dz.ondragleave = () => dz.classList.remove('dragover');
-  dz.ondrop = (e) => {
-    e.preventDefault();
-    dz.classList.remove('dragover');
-    if (e.dataTransfer.files.length) handleImportFile(e.dataTransfer.files[0]);
-  };
-  fi.onchange = (e) => { if (e.target.files.length) handleImportFile(e.target.files[0]); };
-  // 重新识别（应用表头开关）
-  document.getElementById('importRemapBtn').onclick = () => {
-    if (!importState.rows.length) { toast('还没有数据', 'warn'); return; }
-    importState.mapping = importState.header.map(h => guessField(h));
-    renderMappingTable();
-    renderPreviewTable();
-    updateImportConfirmBtn();
-    toast('已重新猜测字段映射', 'success');
-  };
-  document.getElementById('importHasHeader').onchange = () => {
-    // 重新按当前文件/文本解析
-    if (importState.currentFile) handleImportFile(importState.currentFile);
-    else if (document.getElementById('importPasteText').value.trim()) handleImportParsePaste();
-  };
-  // 确认导入
-  document.getElementById('importConfirm').onclick = doImport;
-}
 
 
 // 从当前表单构建需求对象
@@ -5245,23 +5006,38 @@ function renderSettings() {
     <div class="settings-section">
       <div class="settings-section-header" id="itemTimeHeader" style="cursor:pointer;user-select:none;">
         <span id="itemTimeArrow" style="display:inline-block;transition:transform .15s;">▸</span>
-        ⏱ 制作工时表 <span class="text-muted text-sm">排期工期真实依据 · 范围类取最大值(上限)×数量 · 可编辑 · 点击展开</span>
+        ⏱ 制作工时表 <span class="text-muted text-sm">排期工期真实依据 · 一律用「最少~最多」区间 · 排期取上限×数量 · 可编辑 · 点击展开</span>
       </div>
       <div class="settings-body" id="itemTimeBody" style="display:none;">
         <div class="settings-row" style="font-weight:600;background:var(--bg-panel);display:grid;grid-template-columns:1.6fr 80px 80px 60px;gap:6px;"><div>产出物</div><div>最少(天)</div><div>最多(天)</div><div>单位</div></div>
         ${Object.keys(getItemTable()).map(function(name){
           var t = getItemTable()[name];
-          // 三档 sizes 折算成 min/max 展示：min=最小档, max=最大档
-          var mn, mx;
-          if (t.sizes) { var v = Object.values(t.sizes); mn = Math.min.apply(null, v); mx = Math.max.apply(null, v); }
-          else { mn = t.min; mx = t.max; }
+          // 一律折算成 min~max 区间展示：
+          //   · sizes(大中小)  → min=最小档, max=最大档
+          //   · modes/cardKinds → min=各档最小, max=各档最大
+          //     （原来这两类没处理，会渲染成 value="undefined"，改完直接把工时写成 NaN —— 老bug）
+          //   · 普通范围类→ 直接用 min/max；min==max 也照样显示两个框（如 3 / 3）
+          var mn, mx, note = '';
+          if (t.sizes) {
+            var v = Object.values(t.sizes);
+            mn = Math.min.apply(null, v); mx = Math.max.apply(null, v);
+            note = '大中小三档：' + Object.entries(t.sizes).map(function(e){ return e[0]+e[1]; }).join(' / ');
+          } else if (t.modes || t.cardKinds) {
+            var vs = Object.values(t.modes || t.cardKinds);
+            mn = Math.min.apply(null, vs.map(function(x){ return x.min; }));
+            mx = Math.max.apply(null, vs.map(function(x){ return x.max; }));
+            note = '多档位（改这里会拍平成单一区间）：' + itemTimeText(name);
+          } else {
+            mn = t.min != null ? t.min : 0;
+            mx = t.max != null ? t.max : mn;
+          }
           return '<div class="settings-row" style="display:grid;grid-template-columns:1.6fr 80px 80px 60px;gap:6px;align-items:center;">'
-            + '<div class="settings-label" title="'+name+'">'+name+'</div>'
+            + '<div class="settings-label" title="'+(note || name)+'">'+name+(note?' <span class="text-muted" style="font-size:10px;">*</span>':'')+'</div>'
             + '<input class="settings-input" type="number" step="0.5" min="0" value="'+mn+'" data-item="'+name+'" data-ikey="min">'
             + '<input class="settings-input" type="number" step="0.5" min="0" value="'+mx+'" data-item="'+name+'" data-ikey="max">'
             + '<div class="text-muted text-sm">/'+t.per+'</div></div>';
         }).join('')}
-        <div class="text-muted text-sm" style="padding:6px 0 0 0;">改完点顶部「💾 保存设置」生效（范围类工期=最大值×数量）。「↺ 恢复默认」把全部设置按《合理工时》表重置。</div>
+        <div class="text-muted text-sm" style="padding:6px 0 0 0;">改完点顶部「💾 保存设置」生效。<b>排期工期 = 区间上限 × 数量</b>；固定工时就把两个框填成同一个数。带 <b>*</b> 的是多档位项（大中小 / 整组·单角色 / 角色卡类型），鼠标悬停看各档明细，<b>在这里改会拍平成单一区间、失去分档</b>。「↺ 恢复默认」把全部设置按《合理工时》表重置。</div>
       </div>
     </div>
 
@@ -5367,50 +5143,131 @@ function renderSettings() {
 }
 
 // 渲染"排期规则表"编辑器
+// 布局：拖动手柄 | # | 节点名 | 类型 | 天数 | 负责人 | 删除
+//⚠️ 已删除原「审批人 (reviewerRule)」列：该字段从未被排期引擎读取（全部为空字符串），
+//      真正的评审人由 resolveReqReviewer() 按「内部重要程度」分档得出，与流程节点配置无关。
+const FLOW_GRID = 'grid-template-columns:22px 26px 1.6fr 76px 140px 1.2fr 30px;';
+// 负责人只有两种语义（原reviewer_p0/p1/p2 是死配置：resolveOwnerId 根本不看 rule 值，
+// 三者行为完全一致；评审人真正由内部重要程度决定）→ 收敛为 制作人 / 评审人
+const FLOW_OWNER_OPTS = [['worker', '制作人'], ['reviewer', '评审人']];
+// 把历史遗留的 reviewer_p0/p1/p2 归一成 reviewer（排期侧只判断是否 === 'worker'，故行为不变）
+function normalizeOwnerRule(rule) {
+  return (rule && String(rule).indexOf('reviewer') === 0) ? 'reviewer' : 'worker';
+}
+// 流程卡片头部的工时汇总：既然每个节点都是区间，总计也给区间（下限合计~上限合计）
+// 带 item 的节点区间来自工时表；多档/多模式取「全部档位的最小~最大」，因为排期时才知道选哪档
+function flowNodeRangeForSummary(n) {
+  if (!n) return { min: 0, max: 0 };
+  if (n.litExpand || n.litBundle) return { min: 0, max: 0 };   // 动态展开，模板阶段算不出
+  if (n.item) {
+    const t = getItemTable()[n.item];
+    if (!t) return { min: 0, max: 0 };
+    const qty = n.qty != null ? n.qty : 1;
+    let lo, hi;
+    if (t.modes)        { const vs = Object.values(t.modes);lo = Math.min(...vs.map(x=>x.min)); hi = Math.max(...vs.map(x=>x.max)); }
+    else if (t.cardKinds){ const vs = Object.values(t.cardKinds); lo = Math.min(...vs.map(x=>x.min)); hi = Math.max(...vs.map(x=>x.max)); }
+    else if (t.sizes)   { const vs = Object.values(t.sizes);      lo = Math.min(...vs);               hi = Math.max(...vs); }
+    else{ lo = t.min != null ? t.min : 0;         hi = t.max != null ? t.max : lo; }
+    return { min: lo * qty, max: hi * qty };
+  }
+  return nodeDaysRange(n);
+}
+function flowTotalText(f) {
+  const nodes = (f && f.nodes) || [];
+  let lo = 0, hi = 0;
+  nodes.forEach(n => { const r = flowNodeRangeForSummary(n); lo += r.min; hi += r.max; });
+  const fmt = x => (Math.round(x * 10) / 10);
+  return fmt(lo) + '~' + fmt(hi) + ' 天';
+}
+// 某产出物被哪些流程的哪些节点用到—— 用于提示「改这个工时会波及几处」
+// 因为工时表是全局共享的：改「概念图」会同时影响剧情场景和世界观场景两套流程
+function itemUsedByText(itemName) {
+  const flows = (state.config && state.config.flows) || {};
+  const uses = [];
+  Object.entries(flows).forEach(([fid, f]) => {
+    (f.nodes || []).forEach(n => {
+      if (n.item === itemName) uses.push((f.name || fid) + '·' + n.name);
+    });
+  });
+  if (!uses.length) return '（暂无流程使用，但纯文学类需求会动态用到）';
+  return uses.join('、');
+}
 function renderFlowsEditor() {
   const wrap = document.getElementById('flowsEditor');
   if (!wrap) return;
   const flows = (state.config && state.config.flows) || {};
-  const TYPE_OPTS = [['hr','人力'],['make','制作'],['review','评审']];
-  const OWNER_OPTS = [['worker','worker'],['reviewer_p0','P0 东哥'],['reviewer_p1','P1 Leader'],['reviewer_p2','P2 对接人']];
+  // 只保留「制作 / 评审」两种：hr(人力) / sync(周会) / archive 在默认流程里为0 个节点，
+  // 且新增这类节点会绕过工时与产能规则，故不再开放给用户选。
+  const TYPE_OPTS = [['make','制作'],['review','评审']];
+  // 记录展开状态，重渲染后恢复（拖动/增删后不会被折叠回去）
+  const openSet = {};
+  wrap.querySelectorAll('.flow-card').forEach(c => {
+    const body = c.querySelector('.flow-card-body');
+    if (body && body.style.display !== 'none') openSet[c.dataset.flow] = 1;
+  });
   wrap.innerHTML = Object.entries(flows).map(([fid, f]) => {
-    const totalDays = (f.nodes || []).reduce((s, n) => s + nodeDays(n), 0);
+    const totalTxt = flowTotalText(f);
+    const isOpen = !!openSet[fid];
     return `
       <div class="flow-card" data-flow="${fid}" style="border:1px solid var(--border-color);border-radius:8px;margin-bottom:8px;background:var(--bg-card);">
         <div class="flow-card-header" data-toggle="flow" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;">
-          <span class="flow-arrow" style="transition:transform .15s;">▸</span>
+          <span class="flow-arrow" style="transition:transform .15s;${isOpen?'transform:rotate(90deg);':''}">▸</span>
           <span style="font-weight:600;">${f.name || fid}</span>
-          <span class="text-muted text-sm">· ${(f.nodes||[]).length} 节点 · 总 ${totalDays} 天</span>
+          <span class="text-muted text-sm">· ${(f.nodes||[]).length} 节点 · 总 ${totalTxt}</span>
           <span style="flex:1;"></span>
         </div>
-        <div class="flow-card-body" style="display:none;padding:0 12px 12px;">
-          <div class="flow-node-row flow-node-head" style="display:grid;grid-template-columns:30px 1.4fr 70px 135px 1.1fr 1.5fr 30px;gap:6px;align-items:center;padding:4px 0;color:var(--text-muted);font-size:11px;">
-            <div>#</div><div>节点名</div><div>类型</div><div>天数（工时类型）</div><div>ownerRule</div><div>审批人 (reviewerRule)</div><div></div>
+        <div class="flow-card-body" style="display:${isOpen?'':'none'};padding:0 12px 12px;">
+          <div class="flow-node-row flow-node-head" style="display:grid;${FLOW_GRID}gap:6px;align-items:center;padding:4px 0;color:var(--text-muted);font-size:11px;">
+            <div title="拖动排序">⇅</div><div>#</div><div>节点名</div><div>类型</div><div>工时（人天区间）</div><div>负责人</div><div></div>
           </div>
           ${(f.nodes || []).map((n, ni) => `
-            <div class="flow-node-row" data-flow="${fid}" data-ni="${ni}" style="display:grid;grid-template-columns:30px 1.4fr 70px 135px 1.1fr 1.5fr 30px;gap:6px;align-items:center;padding:3px 0;">
+            <div class="flow-node-row" data-flow="${fid}" data-ni="${ni}" style="display:grid;${FLOW_GRID}gap:6px;align-items:center;padding:3px 0;border-top:1px solid transparent;border-bottom:1px solid transparent;">
+              <div class="flow-drag-handle" draggable="true" title="按住拖动可调整顺序（排期按最终顺序执行）"
+                   style="cursor:grab;text-align:center;color:var(--text-muted);user-select:none;font-size:13px;line-height:1;">⋮⋮</div>
               <div class="text-muted text-sm">${ni + 1}</div>
-              <input class="settings-input" data-flow-key="name" value="${(n.name||'').replace(/"/g,'&quot;')}" style="width:100%;">
+              <input class="settings-input" data-flow-key="name" value="${(n.name||'').replace(/"/g,'&quot;')}" style="width:100%;" title="⚠️ 名称含「修改」或「发包」会被排期引擎当作嵌入节点（锁 1 天、不占工期）">
               <select class="settings-input" data-flow-key="type">${TYPE_OPTS.map(([v,l]) => `<option value="${v}" ${n.type===v?'selected':''}>${l}</option>`).join('')}</select>
-              ${n.item ? `
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                  <span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;width:fit-content;${daysBadgeStyle(itemTimeKind(n.item))}">${itemTimeKind(n.item)}</span>
+              ${n.item ? (() => {
+                const _k = itemTimeKind(n.item);
+                //「范围」类（单一区间）→ 直接可编辑，写回共享工时表
+                //多档类（大中小/模式/角色卡）→ 在这里改会拍平失去分档，故仍只读，引导去工时表改
+                if (_k === '范围') {
+                  const _t = getItemTable()[n.item] || {};
+                  const _mn = _t.min != null ? _t.min : 0;
+                  const _mx = _t.max != null ? _t.max : _mn;
+                  const _uses = itemUsedByText(n.item);
+                  return `
+                <div style="display:flex;align-items:center;gap:3px;" title="产出物「${n.item}」的工时区间（人天）&#10;⚠️ 这是共享工时，改动会同时影响：${_uses}&#10;排期按上限×数量计算">
+                  <input class="settings-input" data-flow-key="itemMin" data-item-name="${n.item}" type="number" min="0" step="0.5" value="${_mn}" style="width:44px;text-align:center;">
+                  <span class="text-muted" style="font-size:11px;">~</span>
+                  <input class="settings-input" data-flow-key="itemMax" data-item-name="${n.item}" type="number" min="0" step="0.5" value="${_mx}" style="width:44px;text-align:center;">
+                  ${n.qty && n.qty !== 1 ? `<span class="text-muted" style="font-size:10px;">×${n.qty}</span>` : ''}
+                  <span style="font-size:10px;color:#C2410C;cursor:help;" title="共享工时：改这里等于改工时表，会同时影响 ${_uses}">🔗</span>
+                </div>`;
+                }
+                return `
+                <div style="display:flex;flex-direction:column;gap:2px;" title="「${n.item}」是多档位产出物，档位由排期时的弹窗决定。在这里改会拍平成单一区间、失去分档，所以只读；要调档位值请到上方「⏱ 制作工时表」">
+                  <span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;width:fit-content;${daysBadgeStyle(_k)}">${_k}</span>
                   <span style="font-size:11px;color:var(--text-muted);">${itemTimeText(n.item)}${n.qty && n.qty !== 1 ? ' ×'+n.qty : ''}</span>
+                </div>`;
+              })() : (() => { const _r = nodeDaysRange(n); return `
+                <div style="display:flex;align-items:center;gap:3px;" title="工时区间（人天）。排期按上限计算，所以「固定 1 天」就写 1~1。">
+                  <input class="settings-input" data-flow-key="daysMin" type="number" min="0" step="0.5" value="${_r.min}" style="width:44px;text-align:center;"
+                         ${n.type === 'review' ? 'disabled' : ''}>
+                  <span class="text-muted" style="font-size:11px;">~</span>
+                  <input class="settings-input" data-flow-key="daysMax" type="number" min="0" step="0.5" value="${_r.max}" style="width:44px;text-align:center;"
+                         ${n.type === 'review' ? 'disabled' : ''}>
+                  ${n.type === 'review' ? '<span class="text-muted" style="font-size:10px;" title="评审节点排期时固定 1 天，且嵌入前一制作环节尾部不额外占工期。要独立占工期请把类型改为「制作」">🔒</span>' : ''}
                 </div>
-              ` : `
-                <div style="display:flex;align-items:center;gap:4px;">
-                  <span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('固定')}">固定</span>
-                  <input class="settings-input" data-flow-key="days" type="number" min="0" step="1" value="${nodeDays(n)}" style="width:46px;">
-                </div>
-              `}
-              <select class="settings-input" data-flow-key="ownerRule">${OWNER_OPTS.map(([v,l]) => `<option value="${v}" ${n.ownerRule===v?'selected':''}>${l}</option>`).join('')}</select>
-              <input class="settings-input" data-flow-key="reviewerRule" value="${(n.reviewerRule||'').replace(/"/g,'&quot;')}" style="width:100%;">
+              `; })()}
+              <select class="settings-input" data-flow-key="ownerRule"
+                      title="制作人 = 按工种自动匹配（文学创作人/ 场景原画 / 角色原画）；评审人 = 按该需求的内部重要程度自动分档（东哥 / Leader / 对接人）">${FLOW_OWNER_OPTS.map(([v,l]) => `<option value="${v}" ${normalizeOwnerRule(n.ownerRule)===v?'selected':''}>${l}</option>`).join('')}</select>
               <button class="btn btn-ghost btn-sm" data-flow-act="del" title="删除节点" style="color:#EF4444;">×</button>
             </div>
           `).join('')}
           <div style="margin-top:8px;">
-            <button class="btn btn-secondary btn-sm" data-flow-act="add">+ 添加节点</button>
-            <span class="text-muted text-sm" style="margin-left:8px;">💡 评审节点固定 1 天；带工时表联动的制作节点按工时类型区分：<span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('大中小')}">大中小</span> 弹窗选档 · <span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('范围')}">范围</span> 区间随机 · <span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('模式')}">模式</span> 整组/单角色；灰徽<span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('固定')}">固定</span> 为写死天数（如周会同步、概念图修改）。天数与代码 DEFAULT_ITEM_TIME 一致。</span>
+            <button class="btn btn-secondary btn-sm" data-flow-act="add">+ 添加环节</button>
+            <span class="text-muted text-sm" style="margin-left:8px;">💡 <b>工时统一用区间</b>（人天）：固定 1 天就写 <code>1~1</code>，排期按<b>上限</b>计算。<b>拖 ⋮⋮ 可调顺序</b>，排期严格按最终顺序执行。<b>类型=评审</b>时工时锁定（固定 1 天且不占工期，🔒），要独立占工期请改成<b>制作</b>。<b>负责人</b>：制作人按工种自动匹配、评审人按内部重要程度自动分档，都不需要手填。节点名<b>请勿含「修改」「发包」</b>（引擎会按关键字当成嵌入节点）。<br>带 <span style="color:#C2410C;">🔗</span> 的是<b>共享工时</b>：它挂着产出物，改这里等于改「⏱ 制作工时表」，会同时影响所有用到该产出物的流程（鼠标悬停可看波及范围）。<span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('大中小')}">大中小</span><span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('模式')}">模式</span><span style="display:inline-block;font-size:10px;line-height:1.5;padding:1px 6px;border-radius:4px;${daysBadgeStyle('角色卡')}">角色卡</span> 这三类是<b>多档位</b>产出物（档位由排期弹窗决定），在这里改会拍平失去分档，所以<b>只读</b>——要调请去上方工时表。<b>新增的制作环节在甘特图里会自动分配一个未被占用的颜色</b>。</span>
           </div>
         </div>
       </div>
@@ -5442,14 +5299,117 @@ function bindFlowsEvents() {
       const flow = state.config.flows[fid];
       if (!flow || !flow.nodes[ni]) return;
       let v = e.target.value;
-      if (key === 'days') v = parseInt(v) || 0;
+      // 工时区间：允许 0.5 步长（有0.5~1 这种档），负数/非法值归0
+      if (key === 'daysMin' || key === 'daysMax' || key === 'itemMin' || key === 'itemMax') {
+        v = parseFloat(v);
+        if (!isFinite(v) || v < 0) v = 0;
+      }
+      // ===== 挂产出物的节点：工时写回【共享工时表】，不是写到节点上 =====
+      // 因为多个流程可能用同一个 item（如「概念图」被剧情场景+世界观场景共用），
+      // 改这里等价于改「⏱ 制作工时表」，必须明确告知用户波及范围
+      if (key === 'itemMin' || key === 'itemMax') {
+        const itemName = e.target.dataset.itemName;
+        if (!itemName) return;
+        // 首次编辑时把内置默认表深拷贝到 state.config.itemTime（与工时表编辑器同一套机制）
+        if (!state.config.itemTime) state.config.itemTime = JSON.parse(JSON.stringify(getItemTable()));
+        const it = state.config.itemTime[itemName];
+        if (!it) return;
+        const other = (key === 'itemMin') ? 'max' : 'min';
+        it[key === 'itemMin' ? 'min' : 'max'] = v;
+        if (it[other] == null) it[other] = v;
+        // 上限不能小于下限：以刚改的那一侧为准把另一侧顶上去
+        let corrected = false;
+        if (it.min > it.max) {
+          if (key === 'itemMin') it.max = it.min; else it.min = it.max;
+          corrected = true;
+        }
+        markSettingsDirty();
+        renderFlowsEditor(); bindFlowsEvents();
+        const uses = itemUsedByText(itemName);
+        toast(`「${itemName}」工时改为 ${it.min}~${it.max} 天${corrected ? '（已自动校正：上限不能小于下限）' : ''}，共享生效于：${uses}`, corrected ? 'warn' : 'success');
+        return;
+      }
+      // 节点名关键字守卫：排期引擎用 /修改/ /发包/ 判「嵌入节点」（锁 1 天、不占工期），
+      // 用户随手起这种名字会让填的天数静默失效 —— 这里当场拦住并回滚
+      if (key === 'name' && /修改|发包/.test(v)) {
+        toast('节点名不能含「修改」或「发包」：排期引擎会把它当成嵌入节点，锁死 1 天且不占工期。请换个名字（如「审查」「终审」）', 'error');
+        e.target.value = flow.nodes[ni].name || '';
+        return;
+      }
       flow.nodes[ni][key] = v;
+      // 旧数据可能只有 days 字段 → 一旦用户动了区间，就彻底切到新字段，避免两套并存
+      if (key === 'daysMin' || key === 'daysMax') {
+        const nd = flow.nodes[ni];
+        if (nd.daysMin == null) nd.daysMin = nd.days != null ? Number(nd.days) : 0;
+        if (nd.daysMax == null) nd.daysMax = nd.days != null ? Number(nd.days) : 0;
+        delete nd.days;
+        // 上限不能小于下限：以用户刚改的那一侧为准，把另一侧顶上去
+        if (Number(nd.daysMax) < Number(nd.daysMin)) {
+          if (key === 'daysMin') nd.daysMax = nd.daysMin;
+          else nd.daysMin = nd.daysMax;
+          markSettingsDirty();
+          renderFlowsEditor(); bindFlowsEvents();
+          toast(`「${nd.name}」工时区间已自动校正为 ${nd.daysMin}~${nd.daysMax}（上限不能小于下限）`, 'warn');
+          return;
+        }
+      }
       markSettingsDirty();   // 草稿态，点「保存设置」才落库
+      // 类型在 make/review 之间切换 → 天数输入框可用性 + 负责人默认值要跟着变，必须重渲染
+      if (key === 'type') {
+        // 类型换成评审 → 负责人默认给「评审人」；换回制作 → 默认「制作人」
+        // （避免出现「评审环节的负责人是制作人」这种自相矛盾的组合）
+        flow.nodes[ni].ownerRule = (v === 'review') ? 'reviewer' : 'worker';
+        renderFlowsEditor(); bindFlowsEvents(); return;
+      }
       // 重算顶部汇总（不重渲染整个编辑器，避免输入框失焦）
-      const totalDays = flow.nodes.reduce((s, n) => s + (parseInt(n.days) || 0), 0);
       const card = row.closest('.flow-card');
       const meta = card.querySelector('.flow-card-header .text-muted');
-      if (meta) meta.textContent = `· ${flow.nodes.length} 节点 · 总 ${totalDays} 天`;
+      if (meta) meta.textContent = `· ${flow.nodes.length} 节点 · 总 ${flowTotalText(flow)}`;
+    };
+  });
+  // 拖动排序（原生 HTML5 drag&drop，零依赖）：只允许抓⋮⋮ 手柄拖，避免与输入框选字冲突
+  // 排期严格按 flow.nodes 数组顺序执行，所以拖完即生效（下次导出会自动重排）
+  let dragFid = null, dragFrom = -1;
+  wrap.querySelectorAll('.flow-drag-handle').forEach(h => {
+    const row = h.closest('.flow-node-row[data-flow]');
+    if (!row) return;
+    h.ondragstart = (e) => {
+      dragFid = row.dataset.flow;
+      dragFrom = parseInt(row.dataset.ni);
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox 必须 setData 才会触发 drop
+      try { e.dataTransfer.setData('text/plain', String(dragFrom)); } catch (err) {}
+      row.style.opacity = '0.4';
+    };
+    h.ondragend = () => {
+      row.style.opacity = '';
+      wrap.querySelectorAll('.flow-node-row').forEach(r => {
+        r.style.borderTopColor = 'transparent'; r.style.borderBottomColor = 'transparent';
+      });
+    };
+  });
+  wrap.querySelectorAll('.flow-node-row[data-flow]').forEach(row => {
+    row.ondragover = (e) => {
+      if (dragFid !== row.dataset.flow) return;   // 不允许跨流程图拖
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const to = parseInt(row.dataset.ni);
+      row.style.borderTopColor = to < dragFrom ?'var(--accent)' : 'transparent';
+      row.style.borderBottomColor = to > dragFrom ? 'var(--accent)' : 'transparent';
+    };
+    row.ondragleave = () => { row.style.borderTopColor = 'transparent'; row.style.borderBottomColor = 'transparent'; };
+    row.ondrop = (e) => {
+      e.preventDefault();
+      const fid = row.dataset.flow;
+      if (dragFid !== fid) return;
+      const to = parseInt(row.dataset.ni);
+      if (isNaN(dragFrom) || isNaN(to) || dragFrom === to) return;
+      const nodes = state.config.flows[fid].nodes;
+      const moved = nodes.splice(dragFrom, 1)[0];
+      nodes.splice(to, 0, moved);
+      dragFid = null; dragFrom = -1;
+      markSettingsDirty(); renderFlowsEditor(); bindFlowsEvents();
+      toast(`已把「${moved.name}」移到第 ${to + 1} 位，保存后生效`, 'success');
     };
   });
   // 添加/删除
@@ -5461,11 +5421,12 @@ function bindFlowsEvents() {
         const card = btn.closest('.flow-card');
         const fid = card.dataset.flow;
         const flow = state.config.flows[fid];
-        flow.nodes.push({ type: 'make', name: '新节点', days: 1, ownerRule: 'worker', reviewerRule: '' });
-        markSettingsDirty(); renderFlowsEditor();
-        // 自动展开
-        const newCard = wrap.querySelector(`.flow-card[data-flow="${fid}"]`);
-        if (newCard) newCard.querySelector('[data-toggle="flow"]').click();
+        flow.nodes.push({ type: 'make', name: '新环节', daysMin: 1, daysMax: 1, ownerRule: 'worker' });
+        markSettingsDirty();
+        // ⚠️ 必须同时 bindFlowsEvents()：只renderFlowsEditor() 会让新增行没有任何事件
+        //（改天数/删除全无反应，历史上被误判成「按钮坏了」）
+        renderFlowsEditor(); bindFlowsEvents();
+        toast('已添加环节，拖 ⋮⋮ 调整位置，改完记得点「保存设置」', 'success');
       } else if (act === 'del') {
         const row = btn.closest('.flow-node-row[data-flow]');
         const fid = row.dataset.flow;
@@ -5494,9 +5455,14 @@ function bindSettingsEvents() {
         const it = state.config.itemTime[ditem];
         if (it) {
           const num = parseFloat(v) || 0;
-          // 统一转成 min/max 结构（三档 sizes 编辑后降级为 min/max，语义更简单）
-          if (it.sizes) { const vals = Object.values(it.sizes); it.min = Math.min.apply(null, vals); it.max = Math.max.apply(null, vals); delete it.sizes; }
+          // 统一转成 min/max 结构：sizes(大中小) / modes(整组·单角色) / cardKinds(角色卡类型)
+          // 编辑后一律拍平成单一区间，语义更简单（UI 上已用 * 提示会失去分档）
+          if (it.sizes)     { const vals = Object.values(it.sizes); it.min = Math.min.apply(null, vals); it.max = Math.max.apply(null, vals); delete it.sizes; }
+          if (it.modes)     { const vs = Object.values(it.modes);     it.min = Math.min.apply(null, vs.map(x=>x.min)); it.max = Math.max.apply(null, vs.map(x=>x.max)); delete it.modes; }
+          if (it.cardKinds) { const vs = Object.values(it.cardKinds); it.min = Math.min.apply(null, vs.map(x=>x.min)); it.max = Math.max.apply(null, vs.map(x=>x.max)); delete it.cardKinds; }
           it[dikey] = num;
+          if (it.min == null) it.min = it.max;
+          if (it.max == null) it.max = it.min;
           if (it.min > it.max) { if (dikey === 'min') it.max = it.min; else it.min = it.max; }
         }
         markSettingsDirty();   // 草稿态：改动仅在内存，点「保存设置」才落库
@@ -5522,12 +5488,24 @@ function bindSettingsEvents() {
   // 顶部「💾 保存设置」：把内存里的草稿一次性落库
   const btnSave = document.getElementById('btnSaveSettings');
   if (btnSave) btnSave.onclick = () => {
+    // 保存前对比流程表：改过就提示「下次导出会按新流程重排」，避免用户以为没生效
+    let flowChanged = false;
+    try {
+      const before = JSON.parse(_settingsSnapshot || '{}');
+      flowChanged = JSON.stringify(before.flows || {}) !== JSON.stringify(state.config.flows || {});
+    } catch (e) {}
     saveState();
     _settingsDirty = false;
     _settingsSnapshot = JSON.stringify(state.config);   // 更新基准快照
     const hint = document.getElementById('settingsDirtyHint');
     if (hint) hint.textContent = '';
-    toast('✅ 设置已保存', 'success');
+    if (flowChanged) {
+      const n = state.requirements.filter(r => state.tasks.some(t => t.reqId === r.id)).length;
+      toast(n ? `✅ 设置已保存 · 流程有变动，${n} 条已排期需求会在下次「导出Excel甘特图」时按新流程自动重排（已标的状态会保留）`
+              : '✅ 设置已保存 · 流程变动将在下次排期时生效', 'success');
+    } else {
+      toast('✅ 设置已保存', 'success');
+    }
   };
   // 顶部「↺ 恢复默认」：所有设置（工时/评分/阈值/Buffer/人力/排期规则）恢复为内置默认，并立即保存
   const btnReset = document.getElementById('btnResetAll');
@@ -5579,28 +5557,62 @@ function bindSettingsEvents() {
 // 顶部按钮
 // ============================================
 document.getElementById('btnExport').onclick = () => {
-  const blob = new Blob([JSON.stringify({ config: state.config, requirements: state.requirements, tasks: state.tasks }, null, 2)], { type: 'application/json' });
+  const payload = { config: state.config, requirements: state.requirements, tasks: state.tasks };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = `schedule_export_${todayStr()}.json`; a.click();
+  const a = document.createElement('a'); a.href = url;
+  // 文件名带条数，方便一眼分辨多个备份
+  a.download = `排期备份_${(state.requirements || []).length}条需求_${todayStr()}.json`;
+  a.click();
   URL.revokeObjectURL(url);
-  toast('已导出', 'success');
+  toast(`已导出 ${(state.requirements || []).length} 条需求 / ${(state.tasks || []).length} 个任务`, 'success');
 };
 document.getElementById('btnImport').onclick = () => document.getElementById('fileInput').click();
 document.getElementById('fileInput').onchange = (e) => {
-  const f = e.target.files[0]; if (!f) return;
+  const f = e.target.files[0];
+  // 每次都清空 value，否则「选同一个文件第二次」不会触发 onchange（浏览器认为没变化）
+  e.target.value = '';
+  if (!f) return;
   const r = new FileReader();
   r.onload = () => {
+    let data;
     try {
-      const data = JSON.parse(r.result);
+      data = JSON.parse(r.result);
+    } catch (err) { toast('不是合法的 JSON 文件：' + err.message, 'error'); return; }
+
+    // 结构校验：至少要有 requirements / tasks / config 之一，否则大概率选错了文件
+    // （比如把甘特图 .xlsx 或别的 json拖进来）
+    const hasAny = data && typeof data === 'object' &&
+      (Array.isArray(data.requirements) || Array.isArray(data.tasks) || (data.config && typeof data.config === 'object'));
+    if (!hasAny) {
+      toast('这个 JSON 里没有 requirements / tasks / config，可能选错了文件', 'error');
+      return;
+    }
+
+    // ⚠️ 导入是「整体覆盖」，不是追加。覆盖前必须让用户看清代价。
+    const nowReq = (state.requirements || []).length, nowTask = (state.tasks || []).length;
+    const newReq = Array.isArray(data.requirements) ? data.requirements.length : '不变';
+    const newTask = Array.isArray(data.tasks) ? data.tasks.length : '不变';
+    const msg =
+      '导入会【整体覆盖】当前数据，不是追加！\n\n' +
+      `当前：${nowReq} 条需求 / ${nowTask} 个任务\n` +
+      `导入后：${newReq} 条需求 / ${newTask} 个任务\n` +
+      (data.config ? '（设置也会被文件里的设置覆盖）\n' : '') +
+      '\n当前数据会被丢弃且无法撤销。确定继续吗？\n' +
+      '建议先点「📤 导出JSON」备份一份。';
+    if (!confirm(msg)) { toast('已取消导入', 'info'); return; }
+
+    try {
       if (data.config) state.config = { ...DEFAULT_CONFIG, ...data.config };
-      if (data.requirements) state.requirements = data.requirements;
-      if (data.tasks) state.tasks = data.tasks;
+      if (Array.isArray(data.requirements)) state.requirements = data.requirements;
+      if (Array.isArray(data.tasks)) state.tasks = data.tasks;
       saveState();
       switchView(state.currentView);
-      toast('已导入', 'success');
-    } catch (e) { toast('文件格式错误', 'error'); }
+      toast(`已导入：${state.requirements.length} 条需求 / ${state.tasks.length} 个任务`, 'success');
+    } catch (err) { toast('导入失败：' + err.message, 'error'); }
   };
-  r.readAsText(f);
+  r.onerror = () => toast('读取文件失败', 'error');
+  r.readAsText(f, 'UTF-8');
 };
 document.getElementById('btnDemo').onclick = loadDemoData;
 document.getElementById('btnReset').onclick = () => {
@@ -5692,7 +5704,6 @@ function loadDemoData() {
 // ============================================
 document.querySelectorAll('.nav-tab').forEach(t => t.onclick = () => switchView(t.dataset.view));
 bindInputForm();
-bindImportFeature();
 loadState();
 switchView('pool');
 
@@ -5741,6 +5752,23 @@ function _latestStartDate(tasks, ddlStr){
 function rescheduleAllForExport() {
   var running = state.requirements.filter(function(r){ return state.tasks.some(function(t){return t.reqId===r.id;}); });
   if (!running.length) return;
+  // ⚠️ 重排会丢弃旧任务对象，但用户在导出的 Excel 里维护的「状态」不能跟着丢。
+  //    先按 reqId+节点名 存一份进度快照，重排后认领回来（节点名是稳定标识，nodeIdx 会因流程调序而变）。
+  // ⚠️ v71：认领键必须去掉「（3-5天）」这类工时后缀 ——
+  //    改了工时区间后节点名会变成「（3-9天）」，用全名当键会认领不上，用户标的状态被静默清空。
+  function snapKeyOf(reqId, nodeName) {
+    var base = String(nodeName || '').split('（')[0].split('(')[0].trim();
+    return reqId + '\u0000' + base;
+  }
+  var progressSnap = {};
+  state.tasks.forEach(function(t){
+    if (!t.reqId || !t.nodeName) return;
+    if ((t.status && t.status !== 'pending') || t.actualStart || t.actualEnd) {
+      progressSnap[snapKeyOf(t.reqId, t.nodeName)] = {
+        status: t.status, actualStart: t.actualStart || '', actualEnd: t.actualEnd ||''
+      };
+    }
+  });
   // 清掉这些需求的旧任务
   var runningIds = {}; running.forEach(function(r){ runningIds[r.id]=1; });
   state.tasks = state.tasks.filter(function(t){ return !runningIds[t.reqId]; });
@@ -5759,6 +5787,11 @@ function rescheduleAllForExport() {
     // 允许超 DDL 也照常排（导出时标红提示），不再因 gatePass=false 直接丢弃
     var opts = r.tightResolve === 'cutBuffer' ? { cutBuffer: 1 } : {};
     var tasks = autoSchedule(r, d, idx, opts);
+    // 认领进度：同名节点把状态搬回来（节点被删/改名则自然丢弃，属预期）
+    tasks.forEach(function(t){
+      var snap = progressSnap[snapKeyOf(t.reqId, t.nodeName)];
+      if (snap) { t.status = snap.status; t.actualStart = snap.actualStart; t.actualEnd = snap.actualEnd; }
+    });
     if(tasks.length){ state.tasks.push.apply(state.tasks, tasks); r.status='running'; }
   });
   saveState();
@@ -6024,7 +6057,10 @@ function exportExcelGantt() {
       curD.setDate(curD.getDate()+1);
     }
 
-    var LEFT = ['需求名称','任务优先级','DDL','状态','模块流程','负责人'];
+    // ⚠️ 左侧列如需增删，只改这里 + 下面的 C_* 常量，其余样式/合并/冻结逻辑全部按常量取值，
+    //    不要再出现裸数字列号（历史上 c===5 这种硬编码在插列时踩过坑）
+    var LEFT = ['需求名称','规范名称','任务优先级','DDL','状态','模块流程','负责人'];
+    var C_NAME = 0, C_STD = 1, C_PRIO = 2, C_DDL = 3, C_STATUS = 4, C_FLOW = 5, C_OWNER = 6;
     var LEFTN = LEFT.length;
     var totalCols = LEFTN + dayCols.length;
 
@@ -6070,6 +6106,12 @@ function exportExcelGantt() {
       var nodes = groups[rid];
       var startRow = rowIdx;
       var pl = tierLabel(r);
+      // 规范名称：逐行铺开（第1 条放该需求首行，第 2 条放次行…填完留空）。
+      // 不与右侧「模块流程」做对应——名称按产出分类聚合，环节按流程节点展开，粒度本就不同。
+      // 实测 468 种分类×管线×选做组合，条数恒≤ 该需求行数（最多 3 条），不会溢出。
+      var stdNames = [];
+      try { stdNames = generateReqNames(r) || []; } catch(e) { stdNames = []; }
+      var nameSlot = 0;
       // 该需求「最晚开始日期」= DDL 倒推整条工期工作日；「实际排期末端」= 所有节点最晚 planEnd
       var latestStart = _latestStartDate(nodes, r.ddl);
       var reqEnd = null;
@@ -6092,10 +6134,11 @@ function exportExcelGantt() {
           ownerRole = t.litRole ? 'lit' : makeRole(t.nodeName, r.category);
           ownerName = POOL[ownerRole].name;
         }
-        var isSysLit = (r.category === 'lit-system');
-        var sysTag = isSysLit ? ' 🔔系统文学设定' : '';
+        // 系统文学设定不再污染需求名称：该提示已在「负责人」列（系统概念设定，建议单独排期）
+        // 和 Sheet2「优先级&审批」的独立列里标注，需求名保持干净
         var row = [
-          (r.name||'') + (overDDL ? (' ⚠超DDL' + (r.overDDLReason === 'manpower' ? '·人力' : '')) : '') + sysTag,
+          (r.name||'') + (overDDL ? (' ⚠超DDL' + (r.overDDLReason === 'manpower' ? '·人力' : '')) : ''),
+          (nameSlot < stdNames.length ? stdNames[nameSlot++] : ''),
           pl,
           r.ddl||'',   // 用户要求：直接照搬 DDL
           statusMap[t.status]||t.status||'待开始',
@@ -6129,6 +6172,70 @@ function exportExcelGantt() {
       headM:   { fill:'2E75B6', font:'FFFFFF' },  // 月份表头
       headD:   { fill:'DEEBF7', font:'1F4E79' }   // 日期表头
     };
+
+    // === 自定义制作环节的配色分配 ===
+    // 用户在「设置 → 排期规则表」里新增的制作环节（不在内置流程里、无 item 工时联动），
+    // 如果继续沿用 COLOR.make 的青色，就会和「场景概念图」等内置美术环节撞色，
+    // 在甘特图上分不出哪一段是新加的环节。
+    // 这里给它们从备用色板里按「节点名」稳定取色：
+    //   · 同名节点在所有需求、所有导出批次里颜色恒定（用名字hash，不用出现顺序）
+    //   · 色板里的颜色与上面 COLOR 表的既有 fill 完全不重叠
+    //   · 冲突时线性探测下一个空位，避免两个自定义环节撞到同一格
+    var EXTRA_PALETTE = [
+      { fill:'A5D8FF', font:'0B4A6F' }, // 天蓝
+      { fill:'D8B4FE', font:'5B21B6' }, //淡紫
+      { fill:'FBCFE8', font:'9D174D' }, // 桃粉（比评审粉更偏紫，且用于制作类）
+      { fill:'BBF7D0', font:'14532D' }, //薄荷绿
+      { fill:'FDE68A', font:'78350F' }, // 麦黄
+      { fill:'FCA5A5', font:'7F1D1D' }, // 砖红
+      { fill:'99F6E4', font:'134E4A' }, // 浅松绿
+      { fill:'C7D2FE', font:'312E81' }, // 雾蓝
+      { fill:'FED7AA', font:'7C2D12' }, // 杏橙
+      { fill:'E9D5FF', font:'6B21A8' }  // 薰衣草
+    ];
+    // 内置流程里出现过的节点名集合 → 用来判定「这是不是用户自建环节」
+    var BUILTIN_NODE_NAMES = (function(){
+      var s = {};
+      try {
+        var df = (typeof DEFAULT_CONFIG !== 'undefined' && DEFAULT_CONFIG.flows) || {};
+        Object.keys(df).forEach(function(fid){
+          (df[fid].nodes || []).forEach(function(n){ if(n && n.name) s[n.name] = 1; });
+        });
+      } catch(e) {}
+      return s;
+    })();
+    // 节点显示名会被加上「（中·5天）」这类后缀 → 取括号前的原始名再比对
+    function baseNodeName(nodeName){
+      return String(nodeName || '').split('（')[0].split('(')[0].trim();
+    }
+    function _nameHash(str){
+      var h = 0;
+      for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+      return Math.abs(h);
+    }
+    var extraColorMap = {};      // 原始节点名 → 色板项
+    var extraColorTaken = {};    // 已占用的色板下标
+    function extraColorFor(rawName){
+      if (extraColorMap[rawName]) return extraColorMap[rawName];
+      var start = _nameHash(rawName) % EXTRA_PALETTE.length;
+      var idx = start;
+      for (var k = 0; k < EXTRA_PALETTE.length; k++) {
+        var cand = (start + k) % EXTRA_PALETTE.length;
+        if (!extraColorTaken[cand]) { idx = cand; break; }
+      }
+      extraColorTaken[idx] = 1;
+      extraColorMap[rawName] = EXTRA_PALETTE[idx];
+      return extraColorMap[rawName];
+    }
+    // 是否为「用户自建的制作环节」：不是内置节点名，且没有 item 工时联动
+    // （带 item 的节点必然来自内置产出表，颜色仍按工种走lit/make）
+    function isCustomMakeNode(t){
+      if (t.nodeType !== 'make') return false;
+      if (t.litRole) return false;                       // 文学制作仍走蓝紫
+      var raw = baseNodeName(t.nodeName);
+      if (!raw) return false;
+      return !BUILTIN_NODE_NAMES[raw];
+    }
     function setCell(r, c, v, style){
       var addr = XLSX.utils.encode_cell({r:r,c:c});
       if(!ws[addr]) ws[addr] = { t:'s', v:(v!=null?v:'') };
@@ -6169,12 +6276,15 @@ function exportExcelGantt() {
         // 颜色严格按节点性质，不做关键字猜测：
         //   评审(review) → 红(粉红) ; 周会同步(sync) → 紫 ; 整体优化(buffer) → 黄 ;
         //   制作(make/hr/archive)：文学制作 → 蓝(lit) ; 美术制作(场景/角色原画) → 蓝绿(make)
+        //   用户在设置里新增的制作环节（如「监修」）→ 从备用色板按名字取一个不撞的颜色，
+        //     否则会和内置美术环节同为青色、在甘特图上分不清
         var color;
         if (t.nodeType === 'review') color = COLOR.review;
         else if (t.nodeType === 'sync') color = COLOR.sync;
         else if (t.nodeType === 'buffer') color = COLOR.buffer;
         else if (t.litRole) color = COLOR.lit;              // 文学制作 → 蓝
         else if (t.nodeName && t.nodeName.indexOf('发包') >= 0) color = COLOR.outsource; // 发包 → 橙黄
+        else if (isCustomMakeNode(t)) color = extraColorFor(baseNodeName(t.nodeName));   // 自定义环节 → 独立配色
         else {
           var role = makeRole(t.nodeName, r.category);   // lit / sceneArt / charArt
           color = (role === 'lit') ? COLOR.lit : COLOR.make;
@@ -6237,27 +6347,32 @@ function exportExcelGantt() {
     for(var R=2;R<=range.e.r;R++){
       for(var c=0;c<LEFTN;c++){
         var addr = XLSX.utils.encode_cell({r:R,c:c});
-        var st = { border:border, alignment:{vertical:'center', wrapText:true, horizontal:((c===0||c===1)?'center':'left')}, font:{sz:10} };
-        // 超 DDL 的需求：需求名(c=0) + 最晚开始日期(c=2) 标红警示
-        if(overDDLRowSet[R] && (c===0 || c===2)){
+        var st = { border:border, alignment:{vertical:'center', wrapText:true, horizontal:((c===C_NAME||c===C_PRIO)?'center':'left')}, font:{sz:10} };
+        // 超 DDL 的需求：需求名 + DDL 标红警示
+        if(overDDLRowSet[R] && (c===C_NAME || c===C_DDL)){
           st.fill = {fgColor:{rgb:'FDECEA'}};
           st.font = {color:{rgb:'D32F2F'}, bold:true, sz:10};
-          if(c===0){ st.alignment = {vertical:'center',horizontal:'center',wrapText:true}; }
+          if(c===C_NAME){ st.alignment = {vertical:'center',horizontal:'center',wrapText:true}; }
         }
-        if(c===1){ // 任务优先级 S：分数 上色（按档位首字母）
+        if(c===C_STD){ // 规范名称列：等宽字体 + 浅底，方便肉眼核对与框选复制
+          st = { border:border, alignment:{vertical:'center',horizontal:'left',wrapText:true},
+                 font:{name:'Consolas',sz:9,color:{rgb:'1F2937'}} };
+          if(ws[addr] && String(ws[addr].v||'')) st.fill = {fgColor:{rgb:'F5F7FA'}};
+        }
+        if(c===C_PRIO){ // 任务优先级 S：分数 上色（按档位首字母）
           var pv = ws[addr]?String(ws[addr].v||''):'';
           var tierChar = pv.charAt(0);
           if(tierChar==='S') st = { border:border, alignment:{vertical:'center',horizontal:'center'}, fill:{fgColor:{rgb:'FEE2E2'}}, font:{color:{rgb:'DC2626'},bold:true,sz:11} };
           else if(tierChar==='A') st = { border:border, alignment:{vertical:'center',horizontal:'center'}, fill:{fgColor:{rgb:'FFF7ED'}}, font:{color:{rgb:'EA580C'},bold:true,sz:11} };
           else if(tierChar==='B') st = { border:border, alignment:{vertical:'center',horizontal:'center'}, fill:{fgColor:{rgb:'F3F4F6'}}, font:{color:{rgb:'6B7280'},bold:true,sz:11} };
         }
-        if(c===3){ // 状态列上色（待开始/制作中/已结束）
+        if(c===C_STATUS){ // 状态列上色（待开始/制作中/已结束）
           var sv = ws[addr]?ws[addr].v:'';
           if(sv==='制作中') st.font = {color:{rgb:'2E7D32'},sz:10,bold:true};
           else if(sv==='待开始') st.font = {color:{rgb:'F57C00'},sz:10};
           else if(sv==='已结束') st.font = {color:{rgb:'9E9E9E'},sz:10};
         }
-        if(c===5 && makeRowSet[R]){ // 负责人列：制作人占位 / 系统设定提示
+        if(c===C_OWNER && makeRowSet[R]){ // 负责人列：制作人占位 / 系统设定提示
           var _r = reqMap[makeRowSet[R].reqId];
           if(_r && _r.category === 'lit-system'){
             // 系统文学设定：在「人力不足 / 已顺延」同列标注，提示 PM 单独拉起排期（mentor 要求）
@@ -6296,24 +6411,26 @@ function exportExcelGantt() {
       if(endc>mc) merges.push({ s:{r:0,c:mc}, e:{r:0,c:endc} });
       mc = endc+1;
     }
-    // 需求名称 / 任务优先级 / 最晚开始日期 三列纵向合并（同一需求跨多行）
+    // 需求名称 / 任务优先级 / DDL 三列纵向合并（同一需求跨多行）
+    // ⚠️ 规范名称列(C_STD) 故意不合并——它是逐行铺开的，合并会把多条名称吞掉
     reqRowRanges.forEach(function(rr){
       if(rr.endRow>rr.startRow){
-        merges.push({ s:{r:rr.startRow,c:0}, e:{r:rr.endRow,c:0} }); // 需求名称
-        merges.push({ s:{r:rr.startRow,c:1}, e:{r:rr.endRow,c:1} }); // 任务优先级
-        merges.push({ s:{r:rr.startRow,c:2}, e:{r:rr.endRow,c:2} }); // 最晚开始日期
+        merges.push({ s:{r:rr.startRow,c:C_NAME}, e:{r:rr.endRow,c:C_NAME} }); // 需求名称
+        merges.push({ s:{r:rr.startRow,c:C_PRIO}, e:{r:rr.endRow,c:C_PRIO} }); // 任务优先级
+        merges.push({ s:{r:rr.startRow,c:C_DDL},  e:{r:rr.endRow,c:C_DDL} });  // DDL
       }
     });
     ws['!merges'] = merges;
 
     // === 列宽：左侧固定；日列窄(每天一列，任务名靠左溢出到相邻空格可读) ===
-    ws['!cols'] = [{wch:22},{wch:12},{wch:13},{wch:9},{wch:24},{wch:16}];
+    //顺序须与 LEFT 一致：需求名称/规范名称/任务优先级/DDL/状态/模块流程/负责人
+    ws['!cols'] = [{wch:22},{wch:34},{wch:12},{wch:13},{wch:9},{wch:24},{wch:16}];
     for(var i=0;i<dayCols.length;i++) ws['!cols'].push({wch:8});
     ws['!rows'] = [{hpt:18},{hpt:28}];
-    // 冻结左侧6列 + 顶部2行表头（库不写，导出后由 fflate 注入 <pane>）
+    // 冻结左侧 LEFTN 列 + 顶部2行表头（库不写，导出后由 fflate 注入 <pane>）
     ws['!freezeInfo'] = { xSplit: LEFTN, ySplit: 2 };
     // 状态列下拉（单选：待开始/制作中/已结束）→ 记录范围，导出后注入 dataValidation
-    ws['!statusValidation'] = { col: 3, firstRow: 2, lastRow: rowIdx-1 };
+    ws['!statusValidation'] = { col: C_STATUS, firstRow: 2, lastRow: rowIdx-1 };
 
     XLSX.utils.book_append_sheet(wb, ws, '排期甘特图');
 

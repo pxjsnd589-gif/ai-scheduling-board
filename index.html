@@ -3705,9 +3705,46 @@ function getAssetPath(itemName) {
 //   · 美术侧：角色原画/场景原画 各 1 行，取该类最新交付物（受分类隔离 → 实际最多 1 行）
 //   · 文学侧：合并为【1 行】，段3 = 各文学二级分类(Bible/叙事/物料/角色设定)的最新产出，用「+」连接
 //     例：文学设定_淘池_剧情设计+细分区域设定
+// 流程节点名 → ASSETS_TREE 里的产出物名。
+// 「场景文学设定」「角色卡文学设定」是 computeForcedLit 注入的强制前置节点 +
+// 工时表条目，都不是 ASSETS_TREE 的叶子，直接丢给 getAssetPath 会返回 null
+// → 该需求的文学设定行整行消失（原画绑定了文学设定，名字却不体现，取名不完整）。
+// 这里按实际档位映射到对应产出物。
+function litNodeToAsset(req, item) {
+  if (item === '角色卡文学设定') {
+    const kind = charCardKind(req, req.modeChoices && req.modeChoices['item:角色卡文学设定']);
+    if (kind === 'NPC固定') return 'NPC角色卡';
+    if (kind === '重点NPC角色卡') return '重点NPC角色卡';
+    return '英雄角色卡';   // 英雄角色卡-整组开发 / -单角色
+  }
+  if (item === '场景文学设定') {
+    // 档位：小（道具）→ 道具设定；大/中 → 场景设定（都归在 文学/物料应用 下）
+    const size = req.sizeChoices && req.sizeChoices['item:场景文学设定'];
+    return (size && String(size).indexOf('小') === 0) ? '道具设定' : '场景设定';
+  }
+  return item;
+}
 function generateReqNames(req) {
-  const rem = calculateRemaining(req);
-  const items = rem.required.concat(rem.optional).map(x => x.item);
+  //数据源 = 实际排期用的流程节点（expandedFlowNodes），而不是另一套 calculateRemaining。
+  // 后者只统计「管线矩阵命中的产出物」，会漏掉 computeForcedLit 注入的强制文学节点：
+  // 例如 char-key + 仅 Bible概念管线时，排期实际排了「角色卡文学设定(7-8天)」，
+  // 但 calculateRemaining 返回空 → 规范名称整个为空，与甘特图对不上。
+  const flow = (state.config.flows || {})[req.category];
+  let items = [];
+  if (flow && flow.nodes) {
+    expandedFlowNodes(req, flow.nodes).forEach(n => {
+      if (n.type !== 'make') return;
+      // Bible 项是无序打包节点（buildLitNodes 里 name='Bible设定'、无 item、
+      // 内含项放在 litBundle 数组），只看 n.item 会整包漏掉
+      if (n.litBundle && n.litBundle.length) { items.push.apply(items, n.litBundle); return; }
+      if (n.item) items.push(litNodeToAsset(req, n.item));
+    });
+  }
+  // 兜底：流程模板缺失时退回旧算法，保证不会整行消失
+  if (!items.length) {
+    const rem = calculateRemaining(req);
+    items = rem.required.concat(rem.optional).map(x => litNodeToAsset(req, x.item));
+  }
   // 按二级分类(mid)分组
   const byMid = {};
   items.forEach(it => {
@@ -3727,19 +3764,20 @@ function generateReqNames(req) {
     return latest;
   }
   const lines = [];
-  // ① 美术侧：角色原画 / 场景原画，各 1 行（分类隔离下实际最多 1 行）
-  ['角色原画', '场景原画'].forEach(mid => {
-    const latest = latestOf(mid);
-    if (latest) lines.push(mid + '_' + seg2 + '_' + latest);
-  });
-  // ② 文学侧：合并 1 行，段3 = 各文学二级分类最新产出用「+」连接（按 Bible→叙事→物料→角色设定 顺序）
+  // ① 文学侧放最上面：原画都绑定在文学设定之后（文学是上游），所以文学行排第一。
+  //    合并 1 行，段3 = 各文学二级分类最新产出用「+」连接（按 Bible→叙事→物料→角色设定 顺序）
   const litLatest = [];
   ['Bible设定', '叙事设计', '物料应用', '角色设定'].forEach(mid => {
     const latest = latestOf(mid);
     if (latest) litLatest.push(latest);
   });
   if (litLatest.length) lines.push('文学设定_' + seg2 + '_' + litLatest.join('+'));
-  return lines;   // e.g. ['角色原画_杨玉环_线条稿', '文学设定_杨玉环_英雄角色卡']
+  // ② 美术侧：角色原画 / 场景原画，各 1 行（分类隔离下实际最多 1 行）
+  ['角色原画', '场景原画'].forEach(mid => {
+    const latest = latestOf(mid);
+    if (latest) lines.push(mid + '_' + seg2 + '_' + latest);
+  });
+  return lines;   // e.g. ['文学设定_杨玉环_英雄角色卡', '角色原画_杨玉环_线条稿']
 }
 // 复制单行规范名称（点按钮）
 window._copyReqName = function(btn) {

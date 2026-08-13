@@ -1604,11 +1604,66 @@ function getPipeName(pid) {
 const MIDS_WITH_ORDER = new Set(['角色原画', '场景原画']);
 
 // 需求分类树（对应腾讯问卷 Q2/Q3/Q4/Q5）
+// ⚠️ key 是【规范名】，必须与下拉框 #f_category 的文案、categoryFlows 的 name 保持一致。
+//    历史上这里写的是「系统性设定」，而下拉框/流程配置写的是「系统文学设定」，
+//    导致智能表格里填「系统文学设定」时匹配不上 → 静默降级成 lit-simple。
+//    现已统一为「系统文学设定」，历史写法一律走下面的别名表兜底。
 const CATEGORY_TREE = {
   '场景类': { '剧情场景': 'scene-story', '世界观场景': 'scene-world' },
   '角色类': { '重点NPC': 'char-key', 'NPC': 'char-normal' },
-  '纯文学类': { '简单补充设定': 'lit-simple', '系统性设定': 'lit-system' }
+  '纯文学类': { '简单补充设定': 'lit-simple', '系统文学设定': 'lit-system' }
 };
+
+// 子分类别名表（一个 category id 可以有多种历史/口头写法）
+// 来源差异：腾讯问卷选项、腾讯文档智能表格选项、UI 下拉、同事口头简称，四套用词各不相同。
+// 新增写法请加到这里，不要去改 CATEGORY_TREE 的 key（key 是对外规范名）。
+const CATEGORY_SUB_ALIASES = {
+  '场景类': {
+    'scene-story': ['剧情场景', '剧情类场景', '剧情'],
+    'scene-world': ['世界观场景', '世界观类场景', '世界观']
+  },
+  '角色类': {
+    'char-key': ['重点NPC', '重点角色', '关键NPC', '重点'],
+    'char-normal': ['普通NPC', '一般NPC', 'NPC', '普通角色']
+  },
+  '纯文学类': {
+    'lit-simple': ['简单补充设定', '简单补充', '补充设定', '简单设定', '简单'],
+    'lit-system': ['系统文学设定', '系统性设定', '系统性文学设定', '系统概念设定', '系统概念', '系统设定', '系统']
+  }
+};
+
+// 子分类文本 → category id。匹配顺序：精确 → 前缀 → 包含（长别名优先）。
+// 「长别名优先」是必须的：否则 "重点NPC" 会先被 "NPC" 命中而错判成 char-normal。
+function resolveSubCategoryId(big, raw) {
+  const aliasMap = CATEGORY_SUB_ALIASES[big];
+  if (!aliasMap) return null;
+  let s = String(raw == null ? '' : raw).trim();
+  if (!s) return null;
+  // 去掉选项前缀（"A." "1、"）与尾部括号说明（"系统性设定（如：区域概念）"）
+  s = s.replace(/^[A-Za-z\d]+\s*[.、)）]\s*/, '')
+       .replace(/[（(][^（()）]*[)）]\s*$/, '')
+       .replace(/\s+/g, '')
+       .trim();
+  if (!s) return null;
+  // 展平成 [别名, id]，按别名长度降序
+  const pairs = [];
+  Object.keys(aliasMap).forEach(id => aliasMap[id].forEach(a => pairs.push([a, id])));
+  pairs.sort((x, y) => y[0].length - x[0].length);
+  let hit = pairs.find(p => p[0] === s);                     // 精确
+  if (!hit) hit = pairs.find(p => s.indexOf(p[0]) === 0);    // s 以别名开头
+  if (!hit) hit = pairs.find(p => s.indexOf(p[0]) >= 0);     // s 包含别名
+  return hit ? hit[1] : null;
+}
+
+// 子分类文本 → CATEGORY_TREE 的规范 key（供 record.subScene/subChar/subLit 存值用）
+// 归一到规范名后，下游任何按字符串比较的地方（如系统文学设定告警）才不会漏判。
+function canonicalSubName(big, raw) {
+  const id = resolveSubCategoryId(big, raw);
+  if (!id) return String(raw == null ? '' : raw).trim();
+  const tree = CATEGORY_TREE[big] || {};
+  const found = Object.keys(tree).find(k => tree[k] === id);
+  return found || String(raw == null ? '' : raw).trim();
+}
 
 
 // v10: 假期周扣除工具函数
@@ -3057,7 +3112,7 @@ const QUESTIONNAIRE_HEADER_MAP = {
   '需求分类': 'bigCategory',         // 场景类/角色类/纯文学类
   '场景子分类': 'subScene',           // 剧情场景/世界观场景
   '角色子分类': 'subChar',            // 重点NPC/NPC
-  '文学子分类': 'subLit',             // 简单补充设定/系统性设定
+  '文学子分类': 'subLit',             // 简单补充设定/系统文学设定
   '需求应用与露出矩阵': 'pipelines',  // 英雄线,CG,PV... (多选)
   '应用管线': 'pipelines',
   '应用与露出': 'pipelines',
@@ -3144,21 +3199,18 @@ function splitAssets(s) {
 }
 
 // 类别 → 内部 category id
+// ⚠️ 一律走 resolveSubCategoryId（别名表 + 长别名优先），不要再直接查 CATEGORY_TREE。
+//    四套来源（问卷选项 / 智能表格选项 / UI 下拉 / 口头简称）用词不同，
+//    直接查表会静默降级到默认值（历史 bug：「系统文学设定」→ lit-simple）。
 function resolveCategory(big, subScene, subChar, subLit) {
-  if (big === '场景类' && subScene) return CATEGORY_TREE['场景类'][subScene] || 'scene-story';
-  if (big === '角色类' && subChar) return CATEGORY_TREE['角色类'][subChar] || 'char-key';
-  if (big === '纯文学类' && subLit) {
-    // 问卷选项常带括号说明（如"系统性设定（如：区域概念）"），做前缀匹配
-    const direct = CATEGORY_TREE['纯文学类'][subLit];
-    if (direct) return direct;
-    const keys = Object.keys(CATEGORY_TREE['纯文学类'] || {});
-    const found = keys.find(k => subLit.indexOf(k) === 0);
-    return found ? CATEGORY_TREE['纯文学类'][found] : 'lit-simple';
-  }
-  if (big === '场景类') return 'scene-story';
-  if (big === '角色类') return 'char-key';
-  if (big === '纯文学类') return 'lit-simple';
-  return 'scene-story';
+  if (big === '场景类') return resolveSubCategoryId('场景类', subScene) || 'scene-story';
+  if (big === '角色类') return resolveSubCategoryId('角色类', subChar) || 'char-key';
+  if (big === '纯文学类') return resolveSubCategoryId('纯文学类', subLit) || 'lit-simple';
+  // 没给大类时，按三棵子树逐个试（智能表格允许只填子类不填大类）
+  const any = resolveSubCategoryId('场景类', subScene)
+           || resolveSubCategoryId('角色类', subChar)
+           || resolveSubCategoryId('纯文学类', subLit);
+  return any || 'scene-story';
 }
 
 // 管线名称 → 内部 id（容错匹配）
@@ -3558,24 +3610,22 @@ function sniffColumnKind(samples) {
   if (!vals.length) return null;
   if (vals.every(v => !!resolvePipelineId(v))) return { kind: 'pipelines' };
   if (vals.every(v => !!findBigOfAssetItem(v))) return { kind: 'assets' };
-  for (const big of Object.keys(CATEGORY_TREE)) {
-    const subs = Object.keys(CATEGORY_TREE[big]);
-    if (vals.every(v => subs.some(k => v.indexOf(k) === 0 || k.indexOf(v) === 0))) return { kind: 'category', big: big };
+  // 分类嗅探同样走别名表，否则「系统文学设定」这类别名嗅不出来
+  for (const big of Object.keys(CATEGORY_SUB_ALIASES)) {
+    if (vals.every(v => !!resolveSubCategoryId(big, v))) return { kind: 'category', big: big };
   }
   return null;
 }
 
-// 子分类值归一：把单元格值对到 CATEGORY_TREE 的 key
+// 子分类值归一：把单元格值对到 CATEGORY_TREE 的**规范 key**
+// ⚠️ 必须返回规范名（走 canonicalSubName），不能原样返回单元格文本：
+//    下游有多处按字符串比较子分类（如系统文学设定告警 `rec.subLit === '系统文学设定'`），
+//    留着「系统性设定」这种别名会漏判。
 function resolveSubCategory(big, raw) {
-  const tree = CATEGORY_TREE[big] || {};
-  const keys = Object.keys(tree);
   const v = normSmartsheetCell(raw);
   if (!v || SMARTSHEET_CHECKED.test(v) || SMARTSHEET_EMPTY.test(v)) return '';
   const first = splitSmartsheetMulti(v)[0] || v;              // 多选只取第一个（分类是单值）
-  let hit = keys.find(k => k === first);
-  if (!hit) hit = keys.find(k => first.indexOf(k) === 0);
-  if (!hit) hit = keys.find(k => first.indexOf(k) >= 0);
-  return hit || first;
+  return canonicalSubName(big, first);
 }
 
 // 探测是否为智能表格布局；返回 {fieldIdx, groupIdx, dataIdx} 或 null
@@ -3893,17 +3943,17 @@ function parseSimple(text) {
     else if (/^(无|已有|概念|文学|无任何)/.test(line)) assets = line;
     else if (/[,,、]/.test(line) || pipeList.includes(line)) pipes = line;
   });
-  // 解析子类
+  // 解析子类（统一走别名表，值归一到规范名）
   let subScene = '', subChar = '', subLit = '';
   if (category === '场景类') {
-    const m = lines.find(l => /剧情场景|世界观场景/.test(l));
-    if (m) subScene = m.match(/(剧情场景|世界观场景)/)[1];
+    const m = lines.find(l => resolveSubCategoryId('场景类', l));
+    if (m) subScene = canonicalSubName('场景类', m);
   } else if (category === '角色类') {
-    const m = lines.find(l => /重点NPC|^NPC$/.test(l));
-    if (m) subChar = m.match(/(重点NPC|NPC)/)[1];
+    const m = lines.find(l => resolveSubCategoryId('角色类', l));
+    if (m) subChar = canonicalSubName('角色类', m);
   } else if (category === '纯文学类') {
-    const m = lines.find(l => /简单补充|系统性/.test(l));
-    if (m) subLit = m.match(/(简单补充设定|系统性设定)/)[1];
+    const m = lines.find(l => resolveSubCategoryId('纯文学类', l));
+    if (m) subLit = canonicalSubName('纯文学类', m);
   }
   return [{
     name, bigCategory: category, subScene, subChar, subLit,
@@ -3999,7 +4049,7 @@ function readCurrentFormToRecord() {
     subChar = cat === 'char-key' ? '重点NPC' : 'NPC';
   } else if (cat === 'lit-simple' || cat === 'lit-system') {
     bigCategory = '纯文学类';
-    subLit = cat === 'lit-simple' ? '简单补充设定' : '系统性设定';
+    subLit = cat === 'lit-simple' ? '简单补充设定' : '系统文学设定';
   }
   const pipelines = Array.from(document.querySelectorAll('#f_pipelines input:checked'))
     .map(cb => state.config.pipelines.find(p => p.id === cb.value)?.name || cb.value);
@@ -4493,7 +4543,9 @@ function showBatchSubmitResult(results) {
         ? `<div class="text-sm" style="color:#B91C1C;margin-top:2px;font-size:11.5px;">${escapeHtml(step4Detail)}</div>`
         : '';
       // 系统文学设定警报：文学子分类=系统文学设定 → 提醒 PM 特别关注
-      const isSysConcept = (r.req && r.req.category === 'lit-system') || rec.subLit === '系统性设定';
+      // 用 resolveSubCategoryId 而非字符串等值，兼容「系统性设定」等历史别名
+      const isSysConcept = (r.req && r.req.category === 'lit-system')
+        || resolveSubCategoryId('纯文学类', rec.subLit) === 'lit-system';
       const sysWarnLine = isSysConcept
         ? `<div class="text-sm" style="color:#B45309;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:4px 8px;margin-top:4px;">⚠ 此为<b>系统概念设定</b>，请 PM 单独排期</div>`
         : '';

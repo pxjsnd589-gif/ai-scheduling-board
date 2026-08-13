@@ -38,7 +38,7 @@ function grab(names) {
 }
 
 const NEEDED = [
-  'ASSETS_TREE', 'MIDS_WITH_ORDER', 'CATEGORY_TREE',
+  'ASSETS_TREE', 'MIDS_WITH_ORDER', 'CATEGORY_TREE', 'CATEGORY_SUB_ALIASES', 'resolveSubCategoryId', 'canonicalSubName',
   'tableToTabText', 'QUESTIONNAIRE_HEADER_MAP', 'normalizeHeader', 'stripMatrixPrefix',
   'splitMulti', 'splitAssets', 'resolveCategory', 'resolvePipelineId', 'resolvePipelineIds',
   'expandAssetTokens', 'detectQuestionnaireFormat', 'extractBracketItem', 'extractColonSuffix',
@@ -128,13 +128,16 @@ console.log('\n  --- 解析结果 ---');
 console.log(JSON.stringify(recs, null, 2));
 
 const rec = recs[0] || {};
-ok('记录数 = 1', recs.length === 1, recs.length);
+// ⚠️ 这里只断言「第一行」的解析质量，不断言总行数 / 具体提需人 ——
+//    参考样例文件会被用户不断追加新需求、换填写人，写死会让测试变成噪音。
+//    行数与多行正确性由用例 8（真实文件端到端）负责。
+ok('至少解析出 1 条', recs.length >= 1, recs.length);
 ok('需求名正确', rec.name === '一只由楼阁与街巷组成的巨大机关手臂', rec.name);
 ok('大分类 = 场景类', rec.bigCategory === '场景类', rec.bigCategory);
 ok('场景子类 = 剧情场景', rec.subScene === '剧情场景', rec.subScene);
 ok('管线 = [PV]', JSON.stringify(rec.pipelines) === '["PV"]', rec.pipelines);
 ok('DDL = 2026-11-13', rec.ddl === '2026-11-13', rec.ddl);
-ok('提需人 = ppxjpeng(彭炫境)', rec.requester === 'ppxjpeng(彭炫境)', rec.requester);
+ok('提需人非空且含英文名', /^[a-zA-Z_]+\(/.test(rec.requester || ''), rec.requester);
 ok('美术已有产出 = [印象图]', JSON.stringify(rec.assetsArtItem) === '["印象图"]', rec.assetsArtItem);
 ok('无文学已有产出', !rec.assetsLitItem, rec.assetsLitItem);
 ok('无特殊产出需求', !rec.specialItems, rec.specialItems);
@@ -238,6 +241,73 @@ console.log(JSON.stringify(rs6.map(x => ({ name: x.name, ddl: x.ddl, copyOf: x._
 ok('副本展开为 3 条', rs6.length === 3, rs6.length);
 ok('副本1 名称/DDL 正确', rs6[1] && rs6[1].name === '副本1' && rs6[1].ddl === '2026-11-11', rs6[1]);
 ok('副本继承管线', rs6[1] && JSON.stringify(rs6[1].pipelines) === '["CG"]', rs6[1] && rs6[1].pipelines);
+
+// ================= 用例 7：子分类别名（v75.1 回归）=================
+// 背景 bug：CATEGORY_TREE 的 key 写的是「系统性设定」，而 UI 下拉/流程配置写的是
+// 「系统文学设定」。智能表格填的是后者 → 查表失败 → 静默降级成 lit-simple。
+// 现改为「别名表 + 长别名优先」匹配，并把 key 统一成规范名。
+console.log('\n===== 用例7：子分类别名归一（含历史 bug 回归）=====');
+const ALIAS_CASES = [
+  ['纯文学类', '系统文学设定', 'lit-system'],
+  ['纯文学类', '系统性设定', 'lit-system'],                  // 老 CATEGORY_TREE 写法
+  ['纯文学类', '系统概念设定', 'lit-system'],
+  ['纯文学类', '系统性设定（如：区域概念）', 'lit-system'],   // 问卷带括号说明
+  ['纯文学类', '简单补充设定', 'lit-simple'],
+  ['纯文学类', '补充设定', 'lit-simple'],
+  ['场景类', '剧情场景', 'scene-story'],
+  ['场景类', '世界观场景', 'scene-world'],
+  ['角色类', '重点NPC', 'char-key'],
+  ['角色类', 'NPC', 'char-normal'],
+  ['角色类', '普通NPC', 'char-normal'],
+  ['角色类', 'A.重点NPC', 'char-key']                        // 带选项前缀
+];
+ALIAS_CASES.forEach(function (cs) {
+  const got = A.resolveSubCategoryId(cs[0], cs[1]);
+  ok('别名 ' + cs[0] + '/' + cs[1] + ' → ' + cs[2], got === cs[2], got);
+});
+// 长别名优先：'重点NPC' 含 'NPC'，不按长度排序会错判成 char-normal
+ok('长别名优先：重点NPC 不被 NPC 抢走', A.resolveSubCategoryId('角色类', '重点NPC') === 'char-key');
+ok('resolveCategory 系统文学设定 → lit-system',
+  A.resolveCategory('纯文学类', '', '', '系统文学设定') === 'lit-system',
+  A.resolveCategory('纯文学类', '', '', '系统文学设定'));
+ok('resolveCategory 缺大类也能靠子类判定',
+  A.resolveCategory('', '', '', '系统文学设定') === 'lit-system',
+  A.resolveCategory('', '', '', '系统文学设定'));
+ok('canonicalSubName 系统性设定 → 系统文学设定',
+  A.canonicalSubName('纯文学类', '系统性设定') === '系统文学设定',
+  A.canonicalSubName('纯文学类', '系统性设定'));
+ok('CATEGORY_TREE 纯文学类 key 已统一为 系统文学设定',
+  Object.keys(A.CATEGORY_TREE['纯文学类']).indexOf('系统文学设定') >= 0,
+  Object.keys(A.CATEGORY_TREE['纯文学类']));
+
+// ================= 用例 8：真实 5 行文件（含径山书院）=================
+console.log('\n===== 用例8：真实多行文件端到端 =====');
+{
+  const rr = readXlsx("C:/Users/ppxjpeng/Desktop/世界观需求录入表单.xlsx");
+  const tt = A.parseTextToTable(A.tableToTabText(rr.header, rr.rows)).table;
+  const rs = A.parseSmartsheetTable(tt);
+  console.log('  解析 ' + rs.length + ' 条：' + rs.map(x => x.name).join(' / '));
+  const lit = rs.find(x => x.name && x.name.indexOf('径山书院') >= 0);
+  if (lit) {
+    const cid = A.resolveCategory(lit.bigCategory, lit.subScene, lit.subChar, lit.subLit);
+    ok('径山书院 大分类 = 纯文学类', lit.bigCategory === '纯文学类', lit.bigCategory);
+    ok('径山书院 子类归一为 系统文学设定', lit.subLit === '系统文学设定', lit.subLit);
+    ok('径山书院 → lit-system（不再误判 lit-simple / scene-story）', cid === 'lit-system', cid);
+    ok('径山书院 管线 = bible+region',
+      JSON.stringify(A.resolvePipelineIds(lit.pipelines || [])) === '["bible","region"]',
+      A.resolvePipelineIds(lit.pipelines || []));
+    ok('径山书院 特殊需求 = 文明设定（与关系）',
+      JSON.stringify(lit.specialItems) === '["文明设定（与关系）"]', lit.specialItems);
+    ok('径山书院 DDL = 2026-12-24', lit.ddl === '2026-12-24', lit.ddl);
+    ok('带括号的产出项名未被截断', lit.specialItems && lit.specialItems[0] === '文明设定（与关系）', lit.specialItems);
+  } else {
+    ok('找到径山书院这条记录', false, rs.map(x => x.name));
+  }
+  const others = rs.filter(x => x.name && x.name.indexOf('径山书院') < 0);
+  ok('其余 4 条仍为 scene-story',
+    others.length === 4 && others.every(x => A.resolveCategory(x.bigCategory, x.subScene, x.subChar, x.subLit) === 'scene-story'),
+    others.map(x => [x.name, A.resolveCategory(x.bigCategory, x.subScene, x.subChar, x.subLit)]));
+}
 
 console.log('\n================================');
 console.log('  PASS ' + pass + ' / FAIL ' + fail);

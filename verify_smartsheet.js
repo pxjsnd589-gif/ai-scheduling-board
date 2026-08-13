@@ -46,7 +46,7 @@ const NEEDED = [
   // v75 新增
   'SMARTSHEET_FIELD_MAP', 'SMARTSHEET_EMPTY', 'SMARTSHEET_CHECKED', 'SMARTSHEET_JUNK_FIELD',
   'normSmartsheetCell', 'normSmartsheetKey', 'splitSmartsheetMulti', 'smartsheetGroupKind',
-  'findAssetMid', 'findBigOfAssetItem', 'sniffColumnKind', 'resolveSubCategory',
+  'findAssetMid', 'findBigOfAssetItem', 'isStrictPipelineName', 'sniffColumnKind', 'resolveSubCategory',
   'detectSmartsheetLayout', 'buildSmartsheetPlan',
   'parseSmartsheetTable', 'expandRecordCopies', 'detectImportFormat'
 ];
@@ -307,6 +307,70 @@ console.log('\n===== 用例8：真实多行文件端到端 =====');
   ok('其余 4 条仍为 scene-story',
     others.length === 4 && others.every(x => A.resolveCategory(x.bigCategory, x.subScene, x.subChar, x.subLit) === 'scene-story'),
     others.map(x => [x.name, A.resolveCategory(x.bigCategory, x.subScene, x.subChar, x.subLit)]));
+
+  // ★ 关键回归：「叙事设计」是产出物列名，但含子串「叙事」（管线名）。
+  //   若用 resolvePipelineId（对单元格值故意做模糊子串匹配）来判列名，
+  //   这一列会被当成管线列 → 该列填的已有产出（剧情设计）整列丢失。
+  //   必须用 isStrictPipelineName（精确匹配 + 产出物名优先）。
+  const ca = rs.find(x => x.name === '长安坍塌');
+  if (ca) {
+    ok('长安坍塌 已有产出含 剧情设计（「叙事设计」列未被误判成管线）',
+      (ca.assetsLitItem || []).indexOf('剧情设计') >= 0, ca.assetsLitItem);
+    ok('长安坍塌 管线仍只有 pv（未被产出列污染）',
+      JSON.stringify(A.resolvePipelineIds(ca.pipelines || [])) === '["pv"]',
+      A.resolvePipelineIds(ca.pipelines || []));
+  } else {
+    ok('找到长安坍塌这条记录', false, rs.map(x => x.name));
+  }
+  // isStrictPipelineName 单元级断言
+  ok('isStrict: 叙事设计 → false（是产出物）', A.isStrictPipelineName('叙事设计') === false);
+  ok('isStrict: 叙事 → true', A.isStrictPipelineName('叙事') === true);
+  ok('isStrict: 世界观Bible概念 → true（去前缀后精确）', A.isStrictPipelineName('世界观Bible概念') === true);
+  ok('isStrict: 角色设定 → false（是产出物）', A.isStrictPipelineName('角色设定') === false);
+  ok('isStrict: 物料应用 → false（是产出物）', A.isStrictPipelineName('物料应用') === false);
+  ok('isStrict: 局内 → false（不是任何管线名）', A.isStrictPipelineName('局内') === false);
+}
+
+// ================= 用例 9：组名行错位/缺失也不能影响分类 =================
+// 真实踩坑：skill 的 handleMessage 会 text.trim()，把首行开头的空列吃掉
+// → 整个组名行左移一格 → 「纯文学类」列被组名判成 pipelines → 分类整列作废
+// → 需求被兜底成 scene-story。修复思路：字段名能自证身份时优先于组名。
+console.log('\n===== 用例9：组名行错位 / 缺失 / 全空 =====');
+{
+  const FIELD = ['需求名', '场景类', '角色类', '纯文学类', '局内', 'Bible设定', '角色原画', 'Bible设定需求', 'DDL', '提需人'];
+  const DATA = ['径山书院概念刷新', '', '', '系统文学设定', '世界观Bible概念, 世界观区域概念', '', '', '文明设定（与关系）', '2026年12月24日', 'ppxjpeng(彭炫境)'];
+  const GROUP_OK = ['', '需求类型', '', '', '需求应用与露出', '已有产出：文学', '已有产出：美术', '特殊产出需求', '', ''];
+
+  const variants = [
+    ['组名正常', GROUP_OK],
+    ['组名左移一格（trim 吃掉前导空列）', GROUP_OK.slice(1).concat([''])],
+    ['组名右移一格', [''].concat(GROUP_OK.slice(0, -1))],
+    ['组名行全空', FIELD.map(() => '')],
+    ['组名行比字段行短一半', GROUP_OK.slice(0, 5)]
+  ];
+  variants.forEach(function (v) {
+    const label = v[0], groupRow = v[1];
+    const t = [groupRow, FIELD, DATA];
+    const rs = A.parseSmartsheetTable(t);
+    const r = rs[0] || {};
+    const cid = A.resolveCategory(r.bigCategory, r.subScene, r.subChar, r.subLit);
+    ok('[' + label + '] 分类仍为 lit-system', cid === 'lit-system', cid + ' / subLit=' + r.subLit);
+    ok('[' + label + '] 管线仍为 bible+region',
+      JSON.stringify(A.resolvePipelineIds(r.pipelines || [])) === '["bible","region"]',
+      A.resolvePipelineIds(r.pipelines || []));
+    ok('[' + label + '] DDL 仍正确', r.ddl === '2026-12-24', r.ddl);
+  });
+
+  // 组名区分 assets vs special 的能力不能被破坏：
+  // 「Bible设定」列（已有产出组）与「Bible设定需求」列（特殊产出组）语义不同
+  const t = [GROUP_OK, FIELD, ['测试', '', '', '', '', '历法节日', '印象图', '世界特点总述', '2026-10-01', '甲']];
+  const r = A.parseSmartsheetTable(t)[0] || {};
+  ok('组名仍能区分 已有产出 vs 特殊产出（文学产出）',
+    JSON.stringify(r.assetsLitItem) === '["历法节日"]', r.assetsLitItem);
+  ok('组名仍能区分 已有产出 vs 特殊产出（美术产出）',
+    JSON.stringify(r.assetsArtItem) === '["印象图"]', r.assetsArtItem);
+  ok('组名仍能区分 已有产出 vs 特殊产出（特殊需求）',
+    JSON.stringify(r.specialItems) === '["世界特点总述"]', r.specialItems);
 }
 
 console.log('\n================================');

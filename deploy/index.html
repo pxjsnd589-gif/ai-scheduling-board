@@ -1603,6 +1603,21 @@ function getPipeName(pid) {
 // 文学类（Bible设定/叙事设计/物料应用/角色设定）是独立项，选哪个就是哪个
 const MIDS_WITH_ORDER = new Set(['角色原画', '场景原画']);
 
+// 严格管线名匹配（仅用于判断"某个列名是不是管线列"）
+// ⚠️ 不能用 resolvePipelineId：它对【单元格值】故意做了模糊子串匹配
+//    （"世界观Bible概念" → bible），用来判列名会误伤 ——
+//    真实踩过：产出物列「叙事设计」含子串「叙事」→ 被判成管线列 →
+//    该列的已有产出（剧情设计）整列丢失。
+// 规则：精确等于 name/id，或去掉「世界观」前缀后精确相等；且不能是产出物名。
+function isStrictPipelineName(s) {
+  const k = normSmartsheetKey(s);
+  if (!k) return false;
+  if (findAssetMid(k) || findBigOfAssetItem(k)) return false;   // 产出物名优先，不算管线
+  const pipes = (state.config.pipelines || []);
+  const stripped = k.replace(/^世界观/, '');
+  return pipes.some(p => p.name === k || p.id === k || p.name === stripped || p.id === stripped);
+}
+
 // 需求分类树（对应腾讯问卷 Q2/Q3/Q4/Q5）
 // ⚠️ key 是【规范名】，必须与下拉框 #f_category 的文案、categoryFlows 的 name 保持一致。
 //    历史上这里写的是「系统性设定」，而下拉框/流程配置写的是「系统文学设定」，
@@ -3682,15 +3697,22 @@ function buildSmartsheetPlan(table, layout) {
     // 智能表格未重命名的默认字段（"单选"/"多选 2"…）：一律忽略，也不做值嗅探
     if (SMARTSHEET_JUNK_FIELD.test(fieldKey)) { plan.push(null); curGroup = ''; continue; }
 
-    // 2) 组名决定语义；无组名时退化为按字段名自行推断（兼容单行表头）
-    //    ⚠️ 组名只是"提示"：合并单元格向右延续可能覆盖到不属于该组的列
-    //    （例：组名行比字段行短，"局内"被上一个组"需求类型"吃掉）。
-    //    所以先按组名试，解析不出有效列时会走下面的字段名推断 / 值嗅探重来。
+    // 2) 判定列语义。三个信息源，可靠性从高到低：字段名 > 数据内容 > 组名。
+    //    ⚠️ 组名最不可靠，原因有两个：
+    //      a) 合并单元格只在首列有值，向右延续时会覆盖到不属于该组的列；
+    //      b) 组名行常比字段行短/错位（handleMessage 的 trim() 会吃掉首行前导空列，
+    //         导致整个组名行左移一格 —— 真实踩过：「纯文学类」列被组名判成 pipelines，
+    //         分类整列作废，需求被兜底成 scene-story）。
+    //    因此：**字段名能自证身份时，直接以字段名为准，不看组名**。
+    //    组名只用来给「字段名说不清」的列补充上下文（如 Bible设定 既可能是已有产出、
+    //    也可能是特殊产出需求，靠组名区分）。
     const byField = () => {
       if (/^(场景类|角色类|纯文学类)$/.test(fieldKey)) return { kind: 'category', big: fieldKey };
-      if (resolvePipelineId(fieldKey)) return { kind: 'pipelines' };
       if (/需求$/.test(fieldKey) && findAssetMid(fieldKey)) return { kind: 'special' };
-      if (findAssetMid(fieldKey)) return { kind: 'assets' };
+      // ⚠️ 产出物名判定必须排在管线判定之前，且管线用严格匹配：
+      //    「叙事设计」是产出物，但含子串「叙事」（管线名），顺序错/用模糊匹配都会误判。
+      if (findAssetMid(fieldKey)) return null;      // 是产出物二级分类 → 交给组名区分 assets/special
+      if (isStrictPipelineName(fieldKey)) return { kind: 'pipelines' };
       return null;
     };
     // 在给定 kind 下把该列具体化；无法具体化返回 null
@@ -3708,10 +3730,26 @@ function buildSmartsheetPlan(table, layout) {
       return null;
     };
 
-    let entry = materialize(smartsheetGroupKind(curGroup), null);
-    // 组名推断失败 → 按字段名自行推断
-    if (!entry) { const f = byField(); if (f) entry = materialize(f.kind, f.big); }
-    // 仍失败 → 用该列实际数据嗅探（兼容用户自定义列名 / 组名错位）
+    // ① 字段名自证（分类列 / 管线列 / "XX需求" 特殊产出列）—— 最高优先级
+    let entry = null;
+    const f = byField();
+    if (f) entry = materialize(f.kind, f.big);
+    // ② 组名 + 字段名共同判定（已有产出 vs 特殊产出需求，靠组名区分）
+    //    ⚠️ 但组名只有在【字段名也认识】时才可信：若 findAssetMid 认不出字段名，
+    //    说明这一列不属于该组（十有八九是组名错位），必须让数据来裁决，
+    //    否则会把管线列当成产出列（实测：组名左移一格时「局内」被判成已有产出）。
+    if (!entry) {
+      const gk = smartsheetGroupKind(curGroup);
+      const fieldSelfKnown = !!findAssetMid(fieldKey);
+      if (gk === 'assets' || gk === 'special') {
+        if (fieldSelfKnown) entry = materialize(gk, null);
+      } else {
+        entry = materialize(gk, null);
+      }
+    }
+    // ③ 字段名是产出物二级分类但组名缺失/不可用 → 按已有产出处理
+    if (!entry && findAssetMid(fieldKey)) entry = materialize('assets', null);
+    // ④ 全都说不清 → 用该列实际数据嗅探（兼容自定义列名 / 组名严重错位）
     if (!entry) { const sn = sniffColumnKind(sampleOf(j)); if (sn) entry = materialize(sn.kind, sn.big); }
     plan.push(entry || null);
   }

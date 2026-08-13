@@ -1,0 +1,245 @@
+// v75 验证：智能表格解析链路端到端实测
+const fs = require('fs');
+const vm = require('vm');
+
+const xcode = fs.readFileSync('./xlsx-js-style.min.js', 'utf8');
+const sbx = { window: {}, console, Uint8Array, ArrayBuffer, Date, Math, JSON, String, Number, Array, Object, RegExp, Error, TextDecoder, TextEncoder, parseInt, parseFloat, isNaN, Set, Map };
+sbx.self = sbx.window; sbx.globalThis = sbx;
+vm.createContext(sbx); vm.runInContext(xcode, sbx);
+const XLSX = sbx.XLSX || sbx.window.XLSX;
+
+const html = fs.readFileSync('./ai-scheduling-board-v10.html', 'utf8');
+const lines = html.split(/\r?\n/);
+
+// 按函数名抓取源码块。
+// 结尾判据用「顶层闭合行」而不是括号配平——因为正则/字符串里含大量 {} ()，配平必错。
+// 本文件所有目标声明都是顶格书写、以顶格的 } 或 }; 结束。
+function grab(names) {
+  const out = [];
+  names.forEach(nm => {
+    const re = new RegExp('^(function|const|let|var)\\s+' + nm + '\\b');
+    let start = -1;
+    for (let i = 0; i < lines.length; i++) { if (re.test(lines[i])) { start = i; break; } }
+    if (start < 0) { console.error('!! 未找到声明: ' + nm); process.exit(1); }
+    let end = start;
+    const first = lines[start].trim();
+    // 单行声明：const X = /regex/;  或  const X = {...};
+    const isOneLiner = /;$/.test(first) && !/[{[(]\s*$/.test(first);
+    if (!isOneLiner) {
+      end = -1;
+      for (let i = start + 1; i < lines.length; i++) {
+        if (/^\};?\s*$/.test(lines[i])) { end = i; break; }
+      }
+      if (end < 0) { console.error('!! 未找到结尾: ' + nm); process.exit(1); }
+    }
+    out.push(lines.slice(start, end + 1).join('\n'));
+  });
+  return out.join('\n\n');
+}
+
+const NEEDED = [
+  'ASSETS_TREE', 'MIDS_WITH_ORDER', 'CATEGORY_TREE',
+  'tableToTabText', 'QUESTIONNAIRE_HEADER_MAP', 'normalizeHeader', 'stripMatrixPrefix',
+  'splitMulti', 'splitAssets', 'resolveCategory', 'resolvePipelineId', 'resolvePipelineIds',
+  'expandAssetTokens', 'detectQuestionnaireFormat', 'extractBracketItem', 'extractColonSuffix',
+  'parseCopyInfo', 'normalizeDDL', 'parseQuestionnaireMultiCol', 'parseSimple', 'parseTextToTable',
+  // v75 新增
+  'SMARTSHEET_FIELD_MAP', 'SMARTSHEET_EMPTY', 'SMARTSHEET_CHECKED', 'SMARTSHEET_JUNK_FIELD',
+  'normSmartsheetCell', 'normSmartsheetKey', 'splitSmartsheetMulti', 'smartsheetGroupKind',
+  'findAssetMid', 'findBigOfAssetItem', 'sniffColumnKind', 'resolveSubCategory',
+  'detectSmartsheetLayout', 'buildSmartsheetPlan',
+  'parseSmartsheetTable', 'expandRecordCopies', 'detectImportFormat'
+];
+
+const PIPES = [
+  { id: 'hero', name: '英雄线' }, { id: 'arena', name: '战场玩法线' }, { id: 'system', name: '系统线' },
+  { id: 'bible', name: 'Bible概念' }, { id: 'region', name: '区域概念' }, { id: 'narrative', name: '叙事' },
+  { id: 'station', name: '站点' }, { id: 'cg', name: 'CG' }, { id: 'pv', name: 'PV' }
+];
+
+const harness = `
+var state = { config: { pipelines: ${JSON.stringify(PIPES)}, people: [] } };
+${grab(NEEDED)}
+globalThis.__api = {};
+${NEEDED.map(n => `globalThis.__api['${n}'] = typeof ${n} !== 'undefined' ? ${n} : undefined;`).join('\n')}
+`;
+const ctx = { console, JSON, Object, Array, String, Number, Math, Date, RegExp, Set, Map, parseInt, parseFloat, isNaN };
+ctx.globalThis = ctx;
+vm.createContext(ctx);
+vm.runInContext(harness, ctx);
+const A = ctx.__api;
+
+// ---- 复刻 readXlsxFile ----
+function xlsxCellToText(c) {
+  if (c == null) return '';
+  if (c instanceof Date && !isNaN(c)) {
+    const r = new Date(Math.round(c.getTime() / 86400000) * 86400000);
+    const p = n => (n < 10 ? '0' + n : '' + n);
+    return r.getUTCFullYear() + '-' + p(r.getUTCMonth() + 1) + '-' + p(r.getUTCDate());
+  }
+  return String(c).replace(/\r/g, '').trim();
+}
+function readXlsx(path) {
+  const wb = XLSX.read(new Uint8Array(fs.readFileSync(path)), { type: 'array', cellDates: true });
+  let best = null;
+  wb.SheetNames.forEach(nm => {
+    const ws = wb.Sheets[nm]; if (!ws) return;
+    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true, blankrows: false });
+    const ne = aoa.filter(r => r.some(c => String(c).trim()));
+    if (!best || ne.length > best.rows.length) best = { name: nm, rows: ne };
+  });
+  let aoa = best.rows;
+  let lastUsed = -1;
+  aoa.forEach(r => { for (let i = r.length - 1; i >= 0; i--) { if (String(r[i]).trim()) { if (i > lastUsed) lastUsed = i; break; } } });
+  if (lastUsed >= 0) {
+    const width = lastUsed + 1;
+    aoa = aoa.map(r => { const o = r.slice(0, width); while (o.length < width) o.push(''); return o; });
+  }
+  return { header: aoa[0].map(h => String(h == null ? '' : h).trim()), rows: aoa.slice(1).map(r => r.map(xlsxCellToText)) };
+}
+
+let pass = 0, fail = 0;
+function ok(label, cond, extra) {
+  if (cond) { pass++; console.log('  PASS  ' + label); }
+  else { fail++; console.log('  FAIL  ' + label + (extra !== undefined ? '  实际=' + JSON.stringify(extra) : '')); }
+}
+
+// ================= 用例 1：真实文件 =================
+console.log('\n===== 用例1：真实智能表格文件 =====');
+const r = readXlsx("C:/Users/ppxjpeng/Desktop/世界观需求录入表单.xlsx");
+const tabText = A.tableToTabText(r.header, r.rows);
+const fmt = A.detectImportFormat(tabText);
+console.log('  格式探测 =', fmt);
+ok('格式识别为 smartsheet', fmt === 'smartsheet', fmt);
+
+const table = A.parseTextToTable(tabText).table;
+const layout = A.detectSmartsheetLayout(table);
+console.log('  layout =', JSON.stringify(layout));
+ok('字段行 = 第2行(index 1)', layout && layout.fieldIdx === 1, layout);
+
+const plan = A.buildSmartsheetPlan(table, layout);
+console.log('\n  --- 列解析计划 ---');
+plan.forEach((p, j) => {
+  console.log('   col' + String(j).padStart(2) + ' ' + JSON.stringify(table[layout.fieldIdx][j] || '').padEnd(18) + ' → ' + (p ? JSON.stringify(p) : '(忽略)'));
+});
+
+const recs = A.parseSmartsheetTable(table);
+console.log('\n  --- 解析结果 ---');
+console.log(JSON.stringify(recs, null, 2));
+
+const rec = recs[0] || {};
+ok('记录数 = 1', recs.length === 1, recs.length);
+ok('需求名正确', rec.name === '一只由楼阁与街巷组成的巨大机关手臂', rec.name);
+ok('大分类 = 场景类', rec.bigCategory === '场景类', rec.bigCategory);
+ok('场景子类 = 剧情场景', rec.subScene === '剧情场景', rec.subScene);
+ok('管线 = [PV]', JSON.stringify(rec.pipelines) === '["PV"]', rec.pipelines);
+ok('DDL = 2026-11-13', rec.ddl === '2026-11-13', rec.ddl);
+ok('提需人 = ppxjpeng(彭炫境)', rec.requester === 'ppxjpeng(彭炫境)', rec.requester);
+ok('美术已有产出 = [印象图]', JSON.stringify(rec.assetsArtItem) === '["印象图"]', rec.assetsArtItem);
+ok('无文学已有产出', !rec.assetsLitItem, rec.assetsLitItem);
+ok('无特殊产出需求', !rec.specialItems, rec.specialItems);
+ok('脏列"单选/多选"未污染', !/单选|多选/.test(JSON.stringify(rec)), rec);
+
+// 下游一致性
+const catId = A.resolveCategory(rec.bigCategory, rec.subScene, rec.subChar, rec.subLit);
+ok('分类映射 → scene-story', catId === 'scene-story', catId);
+const pipeIds = A.resolvePipelineIds(rec.pipelines || []);
+ok('管线映射 → [pv]', JSON.stringify(pipeIds) === '["pv"]', pipeIds);
+const assets = A.expandAssetTokens(rec.assetsArtItem || []);
+ok('产出展开 = [印象图]', JSON.stringify(assets) === '["印象图"]', assets);
+
+// ================= 用例 2：多行 + 多选 + 特殊需求 =================
+console.log('\n===== 用例2：多行/多选/特殊需求/文学产出 =====');
+const t2 = [
+  ['', '需求类型（若无某类需求可不选该类选项）', '', '', '需求应用与露出（若无某类需求可不选该类选项）', '已有产出：文学', '', '', '', '已有产出：美术', '', '特殊产出需求', '', '', '', '', ''],
+  ['需求名', '场景类', '角色类', '纯文学类', '局内', 'Bible设定', '叙事设计', '物料应用', '角色设定', '角色原画', '场景原画', 'Bible设定需求', '场景原画需求', '角色设定需求', '物料应用需求', 'DDL', '提需人'],
+  ['星港的黎明', '世界观场景', '', '', 'CG,PV', '', '', '', '', '', '概念图', '天文地理设定,历法节日', '', '', '道具设定', '2026/9/30', '张三'],
+  ['无名剑客', '', '重点NPC', '', '英雄线', '', '', '', '重点NPC角色卡', '设定图', '', '', '', '', '', '2026年12月1日', '李四'],
+  ['历法体系补完', '', '', '简单补充设定', 'Bible概念', '历法节日', '', '', '', '无', '无', '世界特点总述', '', '', '', '2027-01-15', '王五']
+];
+ok('用例2 识别为 smartsheet', !!A.detectSmartsheetLayout(t2));
+const rs2 = A.parseSmartsheetTable(t2);
+console.log(JSON.stringify(rs2, null, 2));
+ok('解析出 3 条', rs2.length === 3, rs2.length);
+
+const [a, b, c] = rs2;
+ok('#1 分类 世界观场景', a.bigCategory === '场景类' && a.subScene === '世界观场景', [a.bigCategory, a.subScene]);
+ok('#1 管线 CG+PV', JSON.stringify(a.pipelines) === '["CG","PV"]', a.pipelines);
+ok('#1 美术产出 概念图', JSON.stringify(a.assetsArtItem) === '["概念图"]', a.assetsArtItem);
+ok('#1 特殊需求 3 项', JSON.stringify(a.specialItems) === '["天文地理设定","历法节日","道具设定"]', a.specialItems);
+ok('#1 DDL 归一 2026-09-30', a.ddl === '2026-09-30', a.ddl);
+
+ok('#2 分类 角色类/重点NPC', b.bigCategory === '角色类' && b.subChar === '重点NPC', [b.bigCategory, b.subChar]);
+ok('#2 文学产出 重点NPC角色卡', JSON.stringify(b.assetsLitItem) === '["重点NPC角色卡"]', b.assetsLitItem);
+ok('#2 美术产出 设定图', JSON.stringify(b.assetsArtItem) === '["设定图"]', b.assetsArtItem);
+ok('#2 DDL 归一 2026-12-01', b.ddl === '2026-12-01', b.ddl);
+ok('#2 分类映射 char-key', A.resolveCategory(b.bigCategory, b.subScene, b.subChar, b.subLit) === 'char-key');
+
+ok('#3 分类 纯文学类/简单补充设定', c.bigCategory === '纯文学类' && c.subLit === '简单补充设定', [c.bigCategory, c.subLit]);
+ok('#3 文学产出 历法节日', JSON.stringify(c.assetsLitItem) === '["历法节日"]', c.assetsLitItem);
+ok('#3 "无" 不进产出', !c.assetsArtItem, c.assetsArtItem);
+ok('#3 特殊需求 世界特点总述', JSON.stringify(c.specialItems) === '["世界特点总述"]', c.specialItems);
+ok('#3 管线 Bible概念', JSON.stringify(c.pipelines) === '["Bible概念"]', c.pipelines);
+
+// ================= 用例 3：不能误伤腾讯问卷老格式 =================
+console.log('\n===== 用例3：腾讯问卷老格式回归 =====');
+const qHeader = ['1.需求名称', '2.需求分类', '3.场景子分类', '6.需求应用与露出矩阵:PV', '9.文学已有产出具体项:[Bible设定] 历法节日', '13.DDL', '16.提需人'];
+const qRows = [['古城遗迹', '场景类', '剧情场景', 'A.PV', '√', '2026-10-01', '赵六']];
+const qText = A.tableToTabText(qHeader, qRows);
+const qFmt = A.detectImportFormat(qText);
+ok('问卷格式仍判定 multi-col', qFmt === 'multi-col', qFmt);
+const qTable = A.parseTextToTable(qText).table;
+ok('问卷不会被误判成 smartsheet', A.detectSmartsheetLayout(qTable) === null);
+const qRecs = A.parseQuestionnaireMultiCol(qText);
+ok('问卷仍能解析出记录', qRecs.length === 1 && qRecs[0].name === '古城遗迹', qRecs);
+ok('问卷 DDL 正常', qRecs[0] && qRecs[0].ddl === '2026-10-01', qRecs[0] && qRecs[0].ddl);
+ok('问卷 提需人正常', qRecs[0] && qRecs[0].requester === '赵六', qRecs[0] && qRecs[0].requester);
+
+// ================= 用例 4：单行表头（无组名行）容错 =================
+console.log('\n===== 用例4：单行表头容错 =====');
+const t4 = [
+  ['需求名', 'DDL', '提需人', '场景类', '局内', '角色原画'],
+  ['测试需求', '2026-08-08', '孙七', '剧情场景', 'CG', '印象图']
+];
+const l4 = A.detectSmartsheetLayout(t4);
+ok('单行表头也能识别', !!l4, l4);
+const rs4 = A.parseSmartsheetTable(t4);
+console.log(JSON.stringify(rs4));
+ok('单行表头 解析 1 条', rs4.length === 1, rs4.length);
+ok('单行表头 需求名正确', rs4[0] && rs4[0].name === '测试需求', rs4[0]);
+ok('单行表头 DDL 正确', rs4[0] && rs4[0].ddl === '2026-08-08', rs4[0] && rs4[0].ddl);
+ok('单行表头 分类正确', rs4[0] && rs4[0].subScene === '剧情场景', rs4[0] && rs4[0].subScene);
+ok('单行表头 管线正确', rs4[0] && JSON.stringify(rs4[0].pipelines) === '["CG"]', rs4[0] && rs4[0].pipelines);
+ok('单行表头 产出正确', rs4[0] && JSON.stringify(rs4[0].assetsArtItem) === '["印象图"]', rs4[0] && rs4[0].assetsArtItem);
+
+// ================= 用例 5：勾选式单元格 =================
+console.log('\n===== 用例5：勾选式单元格（列名即内容）=====');
+const t5 = [
+  ['', '需求应用与露出', '', '已有产出：美术', ''],
+  ['需求名', 'CG', 'PV', '角色原画', '场景原画', 'DDL', '提需人'],
+  ['勾选测试', '√', '是', '', '√', '2026-09-09', '周八']
+];
+const rs5 = A.parseSmartsheetTable(t5);
+console.log(JSON.stringify(rs5));
+ok('勾选式 管线 = CG+PV', rs5[0] && JSON.stringify(rs5[0].pipelines) === '["CG","PV"]', rs5[0] && rs5[0].pipelines);
+ok('勾选式 产出 = 场景原画(整组)', rs5[0] && JSON.stringify(rs5[0].assetsArtItem) === '["场景原画"]', rs5[0] && rs5[0].assetsArtItem);
+const exp5 = A.expandAssetTokens(rs5[0].assetsArtItem);
+ok('勾选式 整组展开为 4 项', exp5.length === 4, exp5);
+
+// ================= 用例 6：需求副本 =================
+console.log('\n===== 用例6：需求副本展开 =====');
+const t6 = [
+  ['', '需求类型', '', '', ''],
+  ['需求名', '场景类', '局内', 'DDL', '提需人', '是否需要添加需求副本', '需求副本信息'],
+  ['主需求A', '剧情场景', 'CG', '2026-10-10', '吴九', '是，需要添加副本', '副本1,2026-11-11;副本2,2026-12-12']
+];
+const rs6 = A.parseSmartsheetTable(t6);
+console.log(JSON.stringify(rs6.map(x => ({ name: x.name, ddl: x.ddl, copyOf: x._copyOf }))));
+ok('副本展开为 3 条', rs6.length === 3, rs6.length);
+ok('副本1 名称/DDL 正确', rs6[1] && rs6[1].name === '副本1' && rs6[1].ddl === '2026-11-11', rs6[1]);
+ok('副本继承管线', rs6[1] && JSON.stringify(rs6[1].pipelines) === '["CG"]', rs6[1] && rs6[1].pipelines);
+
+console.log('\n================================');
+console.log('  PASS ' + pass + ' / FAIL ' + fail);
+console.log('================================');
+process.exit(fail ? 1 : 0);

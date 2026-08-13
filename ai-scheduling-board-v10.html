@@ -2929,7 +2929,17 @@ function readXlsxFile(file) {
         // 去掉整列都空的尾列（问卷导出常带若干空列，会打乱「按列数对齐」的解析策略）
         let lastUsed = -1;
         aoa.forEach(r => { for (let i = r.length - 1; i >= 0; i--) { if (String(r[i]).trim()) { if (i > lastUsed) lastUsed = i; break; } } });
-        if (lastUsed >= 0) aoa = aoa.map(r => r.slice(0, lastUsed + 1));
+        if (lastUsed >= 0) {
+          // ⚠️ v75: 必须「补齐」而非只截断。智能表格的第 1 行是合并单元格组名，
+          //    尾部往往没有值 → aoa[0] 比字段行短；若不补齐，tableToTabText 会按
+          //    header.length 把数据行右侧截掉（DDL / 提需人 正好在右侧，直接丢失）。
+          const width = lastUsed + 1;
+          aoa = aoa.map(r => {
+            const out = r.slice(0, width);
+            while (out.length < width) out.push('');
+            return out;
+          });
+        }
 
         const header = aoa[0].map(h => String(h == null ? '' : h).trim());   // 原始表头，不做 normalize
         const dataRows = aoa.slice(1).map(r => r.map(c => xlsxCellToText(c)));
@@ -3022,9 +3032,11 @@ async function handleAiFile(file) {
     document.getElementById('pasteInput').value = tabText;
 
     // 提前探测格式：若识别不出多列问卷结构，明确告知用户（而不是静默降级成 1 条残缺记录）
-    const fmt = detectQuestionnaireFormat(tabText);
+    const fmt = detectImportFormat(tabText);
     aiParseAndFill(tabText);
-    if (fmt === 'multi-col') {
+    if (fmt === 'smartsheet') {
+      toast(`已按「智能表格」格式解析，自动填到右侧`, 'success');
+    } else if (fmt === 'multi-col') {
       toast(`已解析 ${result.rows.length} 条，自动填到右侧`, 'success');
     } else {
       toast(`已读到 ${result.rows.length} 行，但未识别出问卷多列结构，已按简单模式解析，请核对右侧字段`, 'warn');
@@ -3435,6 +3447,336 @@ function normalizeDDL(s) {
   return t;
 }
 
+/* =========================================================================
+   智能表格（腾讯文档·智能表）导出格式解析   v75 新增
+   -------------------------------------------------------------------------
+   与腾讯问卷导出的差异（也正是老逻辑解析不准的根因）：
+     ① 表头是【两行】：第 1 行是合并单元格的「组名」，第 2 行才是真正的字段名。
+        老逻辑固定拿 aoa[0] 当表头 → 把组名行当表头、把字段名行当第一条数据。
+     ② 列名【没有 "1." "9." 编号】，也没有 ":[Bible设定] xxx" 后缀，
+        老逻辑的 QUESTIONNAIRE_HEADER_MAP / extractBracketItem 全部落空。
+     ③ 语义从「表头带项名、单元格是勾选」反转为「表头是分类、单元格是项名」。
+   解析策略：组名行向右延续（合并单元格只在首列有值）→ 组 + 字段 共同决定列语义。
+   =========================================================================*/
+
+// 字段级直接映射（第 2 行表头 → 内部字段）
+const SMARTSHEET_FIELD_MAP = {
+  '需求名': 'name', '需求名称': 'name', '需求标题': 'name',
+  'DDL': 'ddl', 'ddl': 'ddl', '截止日期': 'ddl', '期望完成时间': 'ddl', '交付时间': 'ddl', '期望DDL': 'ddl',
+  '提需人': 'requester', '提单人': 'requester', '需求方': 'requester', '提出人': 'requester',
+  '需求描述': 'desc', '其他需求描述': 'desc', '描述': 'desc', '备注': 'desc', '补充说明': 'desc',
+  '是否需要添加需求副本': 'needCopy', '需求副本信息': 'copyInfo'
+};
+
+// 表示"没有/不涉及"的单元格值（智能表格空多选常填这些）
+const SMARTSHEET_EMPTY = /^(无|none|null|n\/a|-|—|–|\/|暂无|不涉及|无需求|没有)$/i;
+// 表示"勾选"的单元格值（列名本身才是内容时）
+const SMARTSHEET_CHECKED = /^(是|有|y|yes|true|√|✓|✔|1|勾选|需要|已有)$/i;
+
+// 智能表格「未改名的默认字段名」黑名单。
+// 用户在智能表格里新建字段但没重命名时，导出会留下 "单选 / 多选 / 多选 2 / 日期 1" 这类列。
+// 它们往往还残留着测试值（实测样例里 "多选"列 = "角色原画"），
+// 若放任值嗅探去猜，会把这些脏列当成真实产出列 → 凭空多出产出物。
+// 因此这类列一律忽略，且不参与值嗅探。
+const SMARTSHEET_JUNK_FIELD = /^(单选|多选|单行文本|多行文本|文本|日期|数字|附件|图片|成员|人员|关联|公式|复选框|勾选框|评分|进度|电话|邮箱|超链接|链接|货币|百分比|创建时间|创建人|最后修改时间|最后修改人|自动编号|ID|列|字段|标题|选项)(\s*\d+)?$/i;
+
+// 单元格文本归一（保留内容，只压空白）
+function normSmartsheetCell(v) {
+  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+}
+// 表头文本归一（去空白 + 去括号说明，用于匹配 key）
+//   "需求类型（若无某类需求可不选该类选项）" → "需求类型"
+function normSmartsheetKey(v) {
+  return String(v == null ? '' : v)
+    .replace(/^\d{1,2}\s*[.、)）]\s*/, '')      // 容错：万一带了编号
+    .replace(/[（(][^（()）]*[)）]\s*$/, '')     // 去尾部括号说明（只去末尾，避免吃掉"文明设定（与关系）"）
+    .replace(/\s+/g, '')
+    .replace(/[*＊:：]+$/, '')
+    .trim();
+}
+
+// 多值单元格拆分（多选题导出常用 , ，、; / 分隔）
+function splitSmartsheetMulti(s) {
+  if (!s) return [];
+  return String(s)
+    .split(/[\n\r,，;；、\/｜|]+|\s{2,}/)
+    .map(x => stripMatrixPrefix(String(x).trim()))
+    .filter(Boolean)
+    .filter(x => !SMARTSHEET_EMPTY.test(x));
+}
+
+// 组名 → 语义类型
+function smartsheetGroupKind(g) {
+  const s = normSmartsheetKey(g);
+  if (!s) return null;
+  if (/需求类型|需求分类|需求大类/.test(s)) return 'category';
+  if (/应用与露出|应用管线|需求应用|露出管线/.test(s)) return 'pipelines';
+  if (/已有产出|现有产出|已有资产|已有素材/.test(s)) return 'assets';
+  if (/特殊产出|选做产出|额外产出|特殊需求/.test(s)) return 'special';
+  return null;
+}
+
+// 字段名 → ASSETS_TREE 里的 {big, mid}；兼容"XX需求"后缀（特殊产出列用）
+function findAssetMid(name) {
+  let s = normSmartsheetKey(name);
+  if (!s) return null;
+  if (ASSETS_TREE[s]) return { big: s, mid: null };          // 直接是 "美术"/"文学"
+  const tryKeys = [s, s.replace(/需求$/, '')];
+  for (const k of tryKeys) {
+    if (!k) continue;
+    for (const [big, midMap] of Object.entries(ASSETS_TREE)) {
+      if (midMap[k]) return { big: big, mid: k };
+    }
+    if (ASSETS_TREE[k]) return { big: k, mid: null };
+  }
+  return null;
+}
+
+// 具体产出项名 → 它属于哪个 big（'美术' / '文学'）；找不到返回 null
+// 用于「嗅探出来的产出列」以及组名不可靠时，按项名自身归类
+function findBigOfAssetItem(tok) {
+  const t = normSmartsheetCell(tok);
+  if (!t) return null;
+  for (const [big, midMap] of Object.entries(ASSETS_TREE)) {
+    for (const items of Object.values(midMap)) {
+      if (items.indexOf(t) >= 0) return big;
+    }
+    if (midMap[t]) return big;                                // 传进来的是二级分类名
+  }
+  return null;
+}
+
+// 值嗅探：靠该列的实际数据判断列语义（表头不认识 / 组名不可靠时的兜底）
+// 只在「样本非空且全部命中同一语义」时才下结论，避免误判。
+function sniffColumnKind(samples) {
+  const vals = [];
+  samples.forEach(s => {
+    const v = normSmartsheetCell(s);
+    if (!v || SMARTSHEET_EMPTY.test(v) || SMARTSHEET_CHECKED.test(v)) return;
+    splitSmartsheetMulti(v).forEach(t => { if (t) vals.push(t); });
+  });
+  if (!vals.length) return null;
+  if (vals.every(v => !!resolvePipelineId(v))) return { kind: 'pipelines' };
+  if (vals.every(v => !!findBigOfAssetItem(v))) return { kind: 'assets' };
+  for (const big of Object.keys(CATEGORY_TREE)) {
+    const subs = Object.keys(CATEGORY_TREE[big]);
+    if (vals.every(v => subs.some(k => v.indexOf(k) === 0 || k.indexOf(v) === 0))) return { kind: 'category', big: big };
+  }
+  return null;
+}
+
+// 子分类值归一：把单元格值对到 CATEGORY_TREE 的 key
+function resolveSubCategory(big, raw) {
+  const tree = CATEGORY_TREE[big] || {};
+  const keys = Object.keys(tree);
+  const v = normSmartsheetCell(raw);
+  if (!v || SMARTSHEET_CHECKED.test(v) || SMARTSHEET_EMPTY.test(v)) return '';
+  const first = splitSmartsheetMulti(v)[0] || v;              // 多选只取第一个（分类是单值）
+  let hit = keys.find(k => k === first);
+  if (!hit) hit = keys.find(k => first.indexOf(k) === 0);
+  if (!hit) hit = keys.find(k => first.indexOf(k) >= 0);
+  return hit || first;
+}
+
+// 探测是否为智能表格布局；返回 {fieldIdx, groupIdx, dataIdx} 或 null
+// 判据：某一行同时含「需求名」和（DDL 或 提需人），且该行不是腾讯问卷的编号表头
+function detectSmartsheetLayout(table) {
+  if (!table || table.length < 2) return null;
+  const limit = Math.min(4, table.length);
+  for (let i = 0; i < limit; i++) {
+    const cells = table[i] || [];
+    const row = cells.map(normSmartsheetKey);
+    const hasName = row.some(c => c === '需求名' || c === '需求名称' || c === '需求标题');
+    if (!hasName) continue;
+    const hasDdl = row.some(c => /^(ddl|截止日期|期望完成时间|交付时间|期望ddl)$/i.test(c));
+    const hasReq = row.some(c => c === '提需人' || c === '提单人' || c === '需求方' || c === '提出人');
+    if (!hasDdl && !hasReq) continue;
+    // 腾讯问卷老格式（"1.需求名称" "9.文学已有产出具体项:[...]"）→ 交给 parseQuestionnaireMultiCol
+    const numbered = cells.filter(c => /^\d{1,2}\s*[.、]\s*\S/.test(String(c).trim())).length;
+    if (numbered >= 3) return null;
+    if (table.length <= i + 1) return null;                   // 只有表头没数据
+    return { fieldIdx: i, groupIdx: i - 1, dataIdx: i + 1 };
+  }
+  return null;
+}
+
+// 生成列解析计划：每列 → null（忽略）或 {col, kind, ...}
+// ⚠️ 组名行是合并单元格，值只出现在首列 → 需要向右延续；
+//    但遇到「字段级直接命中的列」(DDL/提需人…) 就重置组，
+//    避免智能表格导出尾部的 "单选/多选/多选 2" 这类脏列继承到上一个组。
+function buildSmartsheetPlan(table, layout) {
+  const fieldRow = table[layout.fieldIdx] || [];
+  const groupRow = layout.groupIdx >= 0 ? (table[layout.groupIdx] || []) : [];
+  let nCols = Math.max(fieldRow.length, groupRow.length);
+  for (let i = layout.dataIdx; i < table.length; i++) nCols = Math.max(nCols, (table[i] || []).length);
+  // 取数据样本（最多 20 行），供表头不认识时做值嗅探
+  const sampleOf = (j) => {
+    const out = [];
+    for (let i = layout.dataIdx; i < table.length && out.length < 20; i++) {
+      out.push((table[i] || [])[j]);
+    }
+    return out;
+  };
+  const plan = [];
+  let curGroup = '';
+  for (let j = 0; j < nCols; j++) {
+    const rawField = fieldRow[j];
+    const fieldKey = normSmartsheetKey(rawField);
+    const gRaw = normSmartsheetCell(groupRow[j]);
+    if (gRaw) curGroup = gRaw;
+
+    // 1) 字段级直接命中优先（需求名 / DDL / 提需人 / 描述 / 副本）
+    const direct = SMARTSHEET_FIELD_MAP[fieldKey] || SMARTSHEET_FIELD_MAP[String(rawField || '').trim()];
+    if (direct) { plan.push({ col: j, kind: 'direct', field: direct }); curGroup = ''; continue; }
+    if (!fieldKey) { plan.push(null); continue; }
+    // 智能表格未重命名的默认字段（"单选"/"多选 2"…）：一律忽略，也不做值嗅探
+    if (SMARTSHEET_JUNK_FIELD.test(fieldKey)) { plan.push(null); curGroup = ''; continue; }
+
+    // 2) 组名决定语义；无组名时退化为按字段名自行推断（兼容单行表头）
+    //    ⚠️ 组名只是"提示"：合并单元格向右延续可能覆盖到不属于该组的列
+    //    （例：组名行比字段行短，"局内"被上一个组"需求类型"吃掉）。
+    //    所以先按组名试，解析不出有效列时会走下面的字段名推断 / 值嗅探重来。
+    const byField = () => {
+      if (/^(场景类|角色类|纯文学类)$/.test(fieldKey)) return { kind: 'category', big: fieldKey };
+      if (resolvePipelineId(fieldKey)) return { kind: 'pipelines' };
+      if (/需求$/.test(fieldKey) && findAssetMid(fieldKey)) return { kind: 'special' };
+      if (findAssetMid(fieldKey)) return { kind: 'assets' };
+      return null;
+    };
+    // 在给定 kind 下把该列具体化；无法具体化返回 null
+    const materialize = (kind, big) => {
+      if (!kind) return null;
+      if (kind === 'category') {
+        const b = /^(场景类|角色类|纯文学类)$/.test(fieldKey) ? fieldKey : big;
+        return b ? { col: j, kind: 'category', big: b } : null;
+      }
+      if (kind === 'pipelines') return { col: j, kind: 'pipelines', sub: fieldKey };
+      if (kind === 'assets' || kind === 'special') {
+        const m = findAssetMid(fieldKey);
+        return { col: j, kind: kind, big: m ? m.big : (big || null), mid: m ? m.mid : null };
+      }
+      return null;
+    };
+
+    let entry = materialize(smartsheetGroupKind(curGroup), null);
+    // 组名推断失败 → 按字段名自行推断
+    if (!entry) { const f = byField(); if (f) entry = materialize(f.kind, f.big); }
+    // 仍失败 → 用该列实际数据嗅探（兼容用户自定义列名 / 组名错位）
+    if (!entry) { const sn = sniffColumnKind(sampleOf(j)); if (sn) entry = materialize(sn.kind, sn.big); }
+    plan.push(entry || null);
+  }
+  return plan;
+}
+
+// 主解析：智能表格 2D 表 → 记录数组（字段结构与 parseQuestionnaireMultiCol 完全一致）
+function parseSmartsheetTable(table) {
+  const layout = detectSmartsheetLayout(table);
+  if (!layout) return [];
+  const plan = buildSmartsheetPlan(table, layout);
+  // 至少要认出「需求名」列，否则不算解析成功
+  if (!plan.some(p => p && p.kind === 'direct' && p.field === 'name')) return [];
+
+  const records = [];
+  for (let i = layout.dataIdx; i < table.length; i++) {
+    const row = table[i] || [];
+    if (!row.some(c => normSmartsheetCell(c))) continue;
+    const rec = {};
+    const pipes = [], litItems = [], artItems = [], spItems = [], spCats = [];
+
+    plan.forEach(p => {
+      if (!p) return;
+      const raw = normSmartsheetCell(row[p.col]);
+      if (!raw || SMARTSHEET_EMPTY.test(raw)) return;
+
+      if (p.kind === 'direct') {
+        if (p.field === 'ddl') rec.ddl = normalizeDDL(stripMatrixPrefix(raw));
+        else if (p.field === 'copyInfo') rec.copyInfo = raw;
+        else rec[p.field] = stripMatrixPrefix(raw);
+        return;
+      }
+      if (p.kind === 'category') {
+        if (rec.bigCategory) return;                          // 已定分类，后续列忽略（分类是单值）
+        rec.bigCategory = p.big;
+        const sub = resolveSubCategory(p.big, raw);
+        if (p.big === '场景类') rec.subScene = sub;
+        else if (p.big === '角色类') rec.subChar = sub;
+        else rec.subLit = sub;
+        return;
+      }
+      if (p.kind === 'pipelines') {
+        const toks = splitSmartsheetMulti(raw).filter(t => resolvePipelineId(t));
+        if (toks.length) { pipes.push(...toks); return; }
+        // 单元格只是勾选标记 → 列名本身就是管线名
+        if (SMARTSHEET_CHECKED.test(raw) && resolvePipelineId(p.sub)) pipes.push(p.sub);
+        return;
+      }
+      if (p.kind === 'assets' || p.kind === 'special') {
+        // 单元格可能是「具体项名」，也可能只是勾选标记（此时列名本身才是内容）
+        const toks = splitSmartsheetMulti(raw);
+        let list = toks.filter(t => !SMARTSHEET_CHECKED.test(t));
+        if (!list.length) {
+          // 纯勾选 → 该列对应的二级分类整组视为命中
+          if (SMARTSHEET_CHECKED.test(raw) && p.mid) list = [p.mid];
+          else return;
+        }
+        if (p.kind === 'special') {
+          spItems.push(...list);
+          if (p.mid) spCats.push(p.mid);
+          else list.forEach(t => { const b = findBigOfAssetItem(t); if (b) spCats.push(t); });
+          return;
+        }
+        // 已有产出：优先用列语义的 big，缺失则按项名自身归类（嗅探列）
+        list.forEach(t => {
+          const big = p.big || findBigOfAssetItem(t);
+          if (big === '美术') artItems.push(t);
+          else litItems.push(t);
+        });
+        return;
+      }
+    });
+
+    const uniq = a => Array.from(new Set(a));
+    if (pipes.length) rec.pipelines = uniq(pipes);
+    if (litItems.length) rec.assetsLitItem = uniq(litItems);
+    if (artItems.length) rec.assetsArtItem = uniq(artItems);
+    if (spItems.length) rec.specialItems = uniq(spItems);
+    if (spCats.length) rec.specialCategories = uniq(spCats);
+    if (rec.name) records.push(rec);
+  }
+  return expandRecordCopies(records);
+}
+
+// v44 需求副本展开（问卷 / 智能表格两条链路共用）
+//   needCopy 含「是/需要」且 copyInfo 有内容 → 主需求 + N 份副本需求
+//   副本继承主需求全部字段，仅改 name / ddl，并标记 _copyOf 便于队列识别
+function expandRecordCopies(records) {
+  const expanded = [];
+  records.forEach(function(rec) {
+    expanded.push(rec);
+    if (rec.needCopy && /是|需要/.test(rec.needCopy) && rec.copyInfo) {
+      parseCopyInfo(rec.copyInfo).forEach(function(c) {
+        const copyRec = Object.assign({}, rec);
+        copyRec.name = c.name || (rec.name + ' #副本');
+        copyRec.ddl = normalizeDDL(c.ddl);
+        copyRec._copyOf = rec.name;
+        copyRec.needCopy = '';
+        copyRec.copyInfo = '';
+        expanded.push(copyRec);
+      });
+    }
+  });
+  return expanded;
+}
+
+// 统一格式探测：智能表格 / 腾讯问卷多列 / 简单行列
+function detectImportFormat(text) {
+  try {
+    const parsed = parseTextToTable(String(text || ''));
+    if (parsed && parsed.table && detectSmartsheetLayout(parsed.table)) return 'smartsheet';
+  } catch (e) { /* ignore */ }
+  return detectQuestionnaireFormat(text);
+}
+
 // 解析腾讯问卷多列格式
 // 注意：cell 内的换行（多选用 \n 分隔）会被错误切分成多行，
 // 因此采用"按 tab 数对齐"的策略：表头有 N 列，数据行 cells.length 应 = N，
@@ -3534,26 +3876,8 @@ function parseQuestionnaireMultiCol(text) {
     if (rec.name) records.push(rec);
   });
 
-  // v44: 展开需求副本
-  //   needCopy 含「是/需要」且 copyInfo 有内容 → 主需求 + N 份副本需求
-  //   副本记录继承主需求全部字段，仅改 name / ddl，并标记 _copyOf 便于队列识别
-  const expanded = [];
-  records.forEach(function(rec) {
-    expanded.push(rec);
-    if (rec.needCopy && /是|需要/.test(rec.needCopy) && rec.copyInfo) {
-      const copies = parseCopyInfo(rec.copyInfo);
-      copies.forEach(function(c) {
-        const copyRec = Object.assign({}, rec);
-        copyRec.name = c.name || (rec.name + ' #副本');
-        copyRec.ddl = normalizeDDL(c.ddl);
-        copyRec._copyOf = rec.name;
-        copyRec.needCopy = '';
-        copyRec.copyInfo = '';
-        expanded.push(copyRec);
-      });
-    }
-  });
-  return expanded;
+  // v44: 展开需求副本（与智能表格链路共用 expandRecordCopies）
+  return expandRecordCopies(records);
 }
 
 // 解析简单格式（按行/按列的旧格式）
@@ -3594,8 +3918,20 @@ function aiParseAndFill(raw) {
   let text = String(raw || '').replace(/^\uFEFF/, '');
   let fmt = detectQuestionnaireFormat(text);
   let records = [];
+
+  // v75: 智能表格（腾讯文档·智能表）格式优先探测。
+  //   它的表头是两行（组名 + 字段名）且列名无编号，
+  //   走 parseQuestionnaireMultiCol 一定错（会把字段名行当数据、绝大多数列匹配不上）。
+  try {
+    const parsedTable = parseTextToTable(text);
+    if (parsedTable && parsedTable.table && detectSmartsheetLayout(parsedTable.table)) {
+      const ss = parseSmartsheetTable(parsedTable.table);
+      if (ss.length) { records = ss; fmt = 'smartsheet'; }
+    }
+  } catch (e) { /* fallthrough 到问卷解析 */ }
+
   // 粘贴模式：表头行包含 ≥3 个 "数字 + 文字" 列名时，先尝试当多列处理
-  if (fmt === 'simple') {
+  if (!records.length && fmt === 'simple') {
     // 嗅探：原文含逗号、且有 "1." "2." 等编号前缀，强制按多列走
     const looksMultiCol = /,\s*"\d+\./.test(text) || /,\s*\d+\./.test(text);
     if (looksMultiCol) {
@@ -3629,7 +3965,8 @@ function aiParseAndFill(raw) {
   // 把第一条加载到右侧表单
   selectPendingRecord(0, { skipFormClear: true });
   document.getElementById('parsePreview').style.display = 'block';
-  toast(`已解析 ${records.length} 条 (${fmt === 'multi-col' ? '腾讯问卷多列' : '简单行/列'})，点击队列条目切换`, 'success');
+  const fmtLabel = fmt === 'smartsheet' ? '智能表格' : (fmt === 'multi-col' ? '腾讯问卷多列' : '简单行/列');
+  toast(`已解析 ${records.length} 条 (${fmtLabel})，点击队列条目切换`, 'success');
 }
 
 /* =========================================================================

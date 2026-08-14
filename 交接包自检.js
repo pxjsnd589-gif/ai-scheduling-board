@@ -29,7 +29,8 @@ console.log('=== 1. 目录结构 ===');
  '文档/排期工具_维护手册.xlsx', '文档/排期甘特图_示例.xlsx',
  '文档/维护速查.md', '文档/排期工具_维护手册.md', '文档/代码索引.md',
  '测试/verify_smartsheet.js', '测试/verify_holiday.js',
- '工具/表单字段自检.js', '工具/gen-code-index.js', '工具/deploy.js', '交接说明.md'].forEach(function (f) {
+ '工具/表单字段自检.js', '工具/gen-code-index.js', '工具/skill同步核对.js',
+ '工具/deploy.js', '交接说明.md'].forEach(function (f) {
   ok('存在 ' + f, fs.existsSync(path.join(TMP, f)));
 });
 
@@ -138,6 +139,18 @@ ok('表单字段自检在包内能直接跑（无参数时列出全部字段）'
   code5 === 0 && out5.indexOf('系统能识别的所有字段') >= 0 &&
   out5.indexOf('需求类型') >= 0 && out5.indexOf('应用与露出') >= 0,
   out5.trim().slice(-300));
+
+// skill 同步核对也要能在包内跑。本机没装 skill 时应优雅跳过（退出码 0）而不是报错，
+// 因为接手人大概率不装 skill —— 这脚本对他没用，但不能让他一跑就红。
+let out6 = '', code6 = 0;
+try {
+  out6 = execSync('node skill同步核对.js', {
+    cwd: path.join(TMP, '工具'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
+  });
+} catch (e) { out6 = (e.stdout || '') + (e.stderr || ''); code6 = e.status || 1; }
+ok('skill 同步核对在包内能跑（有 skill 则核对，没装则优雅跳过）',
+  code6 === 0 && (out6.indexOf('skill 与网页版一致') >= 0 || out6.indexOf('跳过核对') >= 0),
+  out6.trim().slice(-400));
 
 // ---------- 6. 文档质量 ----------
 console.log('\n=== 6. 文档质量 ===');

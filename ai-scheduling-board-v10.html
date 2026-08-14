@@ -782,6 +782,47 @@ V129云梦泽剧情场景概念刷新
   </div>
 </div>
 
+<div class="modal-backdrop hidden" id="holidayModal">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-header">
+      <div class="modal-title">添加新一年的法定假期</div>
+      <button class="modal-close" id="holidayClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <span style="font-size:13px;">年份</span>
+        <input class="input" id="holidayYear" type="number" min="2024" max="2060" step="1" style="width:110px;">
+        <span class="text-muted text-sm">国务院一般在前一年 11-12 月发布次年安排</span>
+      </div>
+
+      <div style="background:var(--bg-panel);border-radius:6px;padding:10px 12px;margin-bottom:12px;">
+        <div style="font-size:13px;margin-bottom:6px;"><b>第 1 步</b>　复制下面这段话，去问任意 AI（豆包／元宝／DeepSeek 都行）</div>
+        <textarea id="holidayPrompt" readonly style="width:100%;height:96px;font-size:12px;line-height:1.5;font-family:var(--font-mono,monospace);border:1px solid var(--border);border-radius:4px;padding:8px;resize:vertical;background:#fff;"></textarea>
+        <button class="btn btn-secondary" id="holidayCopyPrompt" style="margin-top:6px;font-size:12px;">📋 复制这段话</button>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <div style="font-size:13px;margin-bottom:6px;"><b>第 2 步</b>　把 AI 的回答粘贴到这里</div>
+        <textarea id="holidayPaste" placeholder="元旦|2029-01-01|2029-01-01&#10;春节|2029-02-12|2029-02-18&#10;清明节|2029-04-04|2029-04-06" style="width:100%;height:120px;font-size:12px;line-height:1.6;border:1px solid var(--border);border-radius:4px;padding:8px;resize:vertical;"></textarea>
+        <div class="text-muted text-sm" style="margin-top:4px;">格式：假期名｜开始日期｜结束日期，一行一个。日期写成 2029-01-01 这样。</div>
+      </div>
+
+      <div style="margin-bottom:6px;">
+        <div style="font-size:13px;margin-bottom:6px;"><b>第 3 步</b>　点下面按钮预览，确认没问题再保存</div>
+        <button class="btn btn-secondary" id="holidayPreviewBtn">🔍 预览会扣哪几周</button>
+      </div>
+      <div id="holidayResult" style="margin-top:10px;"></div>
+    </div>
+    <div class="modal-footer">
+      <div class="text-muted text-sm">保存后立即生效，之后排期会自动跳过这些周</div>
+      <div class="modal-footer-right">
+        <button class="btn btn-secondary" id="holidayCancel">取消</button>
+        <button class="btn btn-primary" id="holidaySave" disabled>保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop hidden" id="modePickerModal">
   <div class="modal" style="max-width:560px;">
     <div class="modal-header">
@@ -1682,10 +1723,34 @@ function canonicalSubName(big, raw) {
 
 
 // v10: 假期周扣除工具函数
-// ⚠️ 假期数据是权威内置数据（非用户可编辑），一律读 DEFAULT_CONFIG，
-//    避免浏览器 localStorage 缓存了旧 state.config.holidays 导致显示过期扣除周
+// v76: 假期数据改为「内置 + 用户补录」两层。
+//   内置 DEFAULT_CONFIG.holidays 是已录入的 2026-2028 权威数据（不走 localStorage，
+//   避免旧缓存导致显示过期扣除周）；
+//   state.config.userHolidays 是接手人后续在设置页补录的年份（如 2029）。
+//   同一年两者都有时【用户补录优先】—— 国务院公告可能调整，人工录入的更新。
+// 这样接手人不用改代码也能加新年份的假期。
 function _holidayCfg(year) {
+  const user = (state && state.config && state.config.userHolidays) || {};
+  if (user[year] && user[year].length) return user[year];
   return (DEFAULT_CONFIG.holidays || {})[year] || [];
+}
+
+// 该年份的假期是内置的还是用户补录的（设置页要标出来）
+function _holidaySource(year) {
+  const user = (state && state.config && state.config.userHolidays) || {};
+  if (user[year] && user[year].length) return 'user';
+  if ((DEFAULT_CONFIG.holidays || {})[year]) return 'builtin';
+  return 'none';
+}
+
+// 所有已有假期数据的年份（内置 + 用户补录，去重排序）
+function allHolidayYears() {
+  const user = (state && state.config && state.config.userHolidays) || {};
+  const set = new Set(
+    Object.keys(DEFAULT_CONFIG.holidays || {}).concat(Object.keys(user))
+      .map(Number).filter(y => y > 2000)
+  );
+  return Array.from(set).sort((a, b) => a - b);
 }
 function getHolidayWeeks(year) {
   const h = _holidayCfg(year);
@@ -1715,6 +1780,129 @@ function getHolidayWeekDetails(year) {
   return h.map(function(entry) {
     return { weeks: entry.weeks.join(', W'), name: entry.name, rule: entry.rule };
   });
+}
+
+/* =========================================================================
+   假期补录（v76）—— 让不会写代码的接手人也能更新法定假期
+   -------------------------------------------------------------------------
+   为什么不做「联网自动获取」：
+     ① 网站挂在公司内网，浏览器调公网 API 大概率被拦（实测两个免费 API 403/404）；
+     ② 国务院每年 11-12 月才发次年放假安排，是人工公告不是稳定接口，
+        接口挂掉的那年正好是最需要它的时候。
+   所以走「问 AI 拿日期 → 粘贴回来 → 自动算周」：
+     接手人只需复制一句话术去问 AI，把回答粘进来，系统自动算出该扣哪几周。
+     完全不碰代码，也不依赖任何外部服务可用性。
+   ========================================================================= */
+
+// 给接手人复制的提问话术。刻意要求 AI 输出固定格式，方便解析。
+function holidayAskPrompt(year) {
+  return [
+    '请告诉我中国 ' + year + ' 年的法定节假日放假安排（国务院办公厅公告版本）。',
+    '',
+    '按下面格式输出，一行一个假期，不要加其它说明文字：',
+    '假期名称|放假开始日期|放假结束日期',
+    '',
+    '例如：',
+    '元旦|2029-01-01|2029-01-01',
+    '春节|2029-02-12|2029-02-18',
+    '',
+    '要求：',
+    '1. 日期用 YYYY-MM-DD 格式',
+    '2. 只写实际放假的连续区间（含调休占用的周末），不要写补班日',
+    '3. 如果某个假期分成不连续的两段，就写成两行'
+  ].join('\n');
+}
+
+// 解析粘贴进来的假期文本 → [{name, start, end}]
+// 尽量宽容：竖线/逗号/制表符/空格分隔都认，日期支持 2029-01-01 / 2029/1/1 / 2029年1月1日
+function parseHolidayPaste(text) {
+  const out = [];
+  const bad = [];
+  String(text || '').split(/\r?\n/).forEach(function(line) {
+    const raw = line.trim();
+    if (!raw) return;
+    // 跳过明显的表头/说明行
+    if (/^(假期名称|名称|序号|说明|例如|格式)/.test(raw)) return;
+    const parts = raw.split(/[|｜\t]+|,\s*|，\s*/).map(function(s) { return s.trim(); }).filter(Boolean);
+    if (parts.length < 2) { bad.push(raw); return; }
+    const name = parts[0];
+    const d1 = normalizeDDL(parts[1]);
+    // 只给一个日期时视为单天假期
+    const d2 = parts[2] ? normalizeDDL(parts[2]) : d1;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d1) || !/^\d{4}-\d{2}-\d{2}$/.test(d2)) { bad.push(raw); return; }
+    out.push({ name: name, start: d1, end: d2 });
+  });
+  return { items: out, bad: bad };
+}
+
+// 一段放假区间 → 它落在哪些 ISO 周、每周各占几天
+// 判据与内置数据一致：某一周内放假天数 > 3 → 扣掉整周
+function holidayRangeToWeeks(start, end) {
+  const s = new Date(start + 'T00:00:00Z');
+  const e = new Date(end + 'T00:00:00Z');
+  if (isNaN(s) || isNaN(e) || e < s) return {};
+  const perWeek = {};
+  for (let t = s.getTime(); t <= e.getTime(); t += 86400000) {
+    const d = new Date(t);
+    const w = getISOWeek(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    perWeek[w] = (perWeek[w] || 0) + 1;
+  }
+  return perWeek;
+}
+
+// 把解析出的假期区间换算成内置数据同构的 [{weeks, name, rule}]
+// 返回 { entries, detail }：detail 用于在界面上展示「为什么扣/为什么不扣」
+function buildHolidayEntries(items) {
+  const entries = [];
+  const detail = [];
+  items.forEach(function(it) {
+    const perWeek = holidayRangeToWeeks(it.start, it.end);
+    const hit = [], miss = [];
+    Object.keys(perWeek).map(Number).sort(function(a, b) { return a - b; }).forEach(function(w) {
+      const days = perWeek[w];
+      if (days > 3) hit.push({ w: w, days: days });
+      else miss.push({ w: w, days: days });
+    });
+    if (hit.length) {
+      entries.push({
+        weeks: hit.map(function(x) { return x.w; }),
+        name: it.name,
+        rule: it.start + '~' + it.end + '，' +
+              hit.map(function(x) { return 'W' + x.w + '占' + x.days + '天'; }).join('、') + '，扣'
+      });
+    }
+    detail.push({
+      name: it.name, start: it.start, end: it.end,
+      hit: hit, miss: miss,
+      counted: hit.length > 0
+    });
+  });
+  // 同一周被多个假期命中时合并（比如国庆中秋连休拆成两行录入）
+  const merged = [];
+  entries.forEach(function(en) {
+    const same = merged.find(function(m) { return m.name === en.name; });
+    if (same) {
+      en.weeks.forEach(function(w) { if (same.weeks.indexOf(w) < 0) same.weeks.push(w); });
+      same.weeks.sort(function(a, b) { return a - b; });
+      same.rule += '；' + en.rule;
+    } else {
+      merged.push(en);
+    }
+  });
+  return { entries: merged, detail: detail };
+}
+
+// 写入用户补录假期（覆盖该年）
+function saveUserHolidays(year, entries) {
+  if (!state.config.userHolidays) state.config.userHolidays = {};
+  state.config.userHolidays[year] = entries;
+  saveState();
+}
+
+// 删除某年的用户补录（回退到内置数据，若无内置则该年不扣周）
+function removeUserHolidays(year) {
+  if (state.config.userHolidays) delete state.config.userHolidays[year];
+  saveState();
 }
 
 let state = {
@@ -1764,6 +1952,9 @@ function loadState() {
         //    但把用户自建的节点按相对位置补回去（认领依据：节点名不在内置模板里）。
         mergedCfg.flows = _mergeUserFlowNodes(parsed.config && parsed.config.flows, DEFAULT_CONFIG.flows);
         mergedCfg.holidays = DEFAULT_CONFIG.holidays;
+        // ⚠️ 不要在这里覆盖 userHolidays —— 那是接手人在设置页手工补录的年份（如 2029），
+        //    属于用户数据不是权威数据，覆盖了他就得重新录一遍。
+        //    它靠上面的 { ...DEFAULT_CONFIG, ...parsed.config } 展开自动保留。
         mergedCfg.pipelines = DEFAULT_CONFIG.pipelines;
         // 分档阈值也是照"管线组合分值分布"重算的权威数据 → 升级时用内置最新版覆盖
         mergedCfg.prioThresholds = DEFAULT_CONFIG.prioThresholds;
@@ -5587,17 +5778,24 @@ function renderSettings() {
     </div>
 
     <div class="settings-section">
-      <div class="settings-section-header">🗓 假期扣除周预览 · 2026-2028 <span class="text-muted text-sm">每周放假天数 &gt;3 天即扣</span></div>
+      <div class="settings-section-header">🗓 法定假期 <span class="text-muted text-sm">每周放假天数 &gt;3 天即扣除整周</span></div>
       <div class="settings-body" id="holidayPreview">
-        ${[2026,2027,2028].map(y => {
-          var hw = getHolidayWeeks(y), details = getHolidayWeekDetails(y);
-          return '<div style="margin-bottom:12px;"><strong>' + y + ' 年</strong> · 扣除 <strong>' + hw.length + '</strong> 周' +
+        ${allHolidayYears().map(y => {
+          var hw = getHolidayWeeks(y), details = getHolidayWeekDetails(y), src = _holidaySource(y);
+          var tag = src === 'user'
+            ? '<span style="font-size:11px;background:#E1F5EE;color:#0F6E56;padding:1px 6px;border-radius:3px;margin-left:6px;">自己录入</span>'
+            : '<span style="font-size:11px;background:var(--bg-panel);color:var(--text-muted);padding:1px 6px;border-radius:3px;margin-left:6px;">系统自带</span>';
+          var delBtn = src === 'user'
+            ? '<button class="btn btn-secondary" style="font-size:11px;padding:1px 8px;margin-left:6px;" onclick="window._delHolidayYear(' + y + ')">删除</button>'
+            : '';
+          return '<div style="margin-bottom:12px;"><strong>' + y + ' 年</strong>' + tag + ' · 扣除 <strong>' + hw.length + '</strong> 周' + delBtn +
             '<div style="margin-top:4px;font-size:12px;color:var(--text-muted);">' +
-            details.map(d => '<span style="display:inline-block;margin-right:8px;background:var(--bg-panel);padding:2px 6px;border-radius:4px;">W' + d.weeks + ' ' + d.name + '</span>').join('') +
+            details.map(d => '<span style="display:inline-block;margin-right:8px;margin-top:3px;background:var(--bg-panel);padding:2px 6px;border-radius:4px;">W' + d.weeks + ' ' + d.name + '</span>').join('') +
             '</div></div>';
         }).join('')}
-        <div class="text-muted text-sm" style="margin-top:8px;">
-          规则：每周独立判断，法定放假天数（含周末）&gt; 3 天 → 扣除整周
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+          <button class="btn btn-primary" id="btnAddHoliday">➕ 添加新一年的假期</button>
+          <span class="text-muted text-sm" style="margin-left:10px;">不用改代码，跟着弹窗三步就行</span>
         </div>
       </div>
     </div>
@@ -6016,7 +6214,134 @@ function bindSettingsEvents() {
     };
     input.click();
   };
+
+  // ---- 假期补录入口 ----
+  const btnAddHol = document.getElementById('btnAddHoliday');
+  if (btnAddHol) btnAddHol.onclick = () => openHolidayModal();
 }
+
+/* =========================================================================
+   假期补录弹窗（v76）
+   三步：复制话术去问 AI → 粘贴回答 → 预览确认后保存
+   ========================================================================= */
+let _holidayPending = null;   // 预览通过后暂存待保存的 entries
+
+function openHolidayModal() {
+  const bd = document.getElementById('holidayModal');
+  if (!bd) return;
+  // 默认年份：已有数据的最大年份 + 1（通常就是接手人要补的那年）
+  const years = allHolidayYears();
+  const nextYear = years.length ? Math.max.apply(null, years) + 1 : new Date().getFullYear() + 1;
+  const yEl = document.getElementById('holidayYear');
+  yEl.value = nextYear;
+  document.getElementById('holidayPaste').value = '';
+  document.getElementById('holidayResult').innerHTML = '';
+  document.getElementById('holidaySave').disabled = true;
+  _holidayPending = null;
+  const syncPrompt = () => {
+    document.getElementById('holidayPrompt').value = holidayAskPrompt(parseInt(yEl.value, 10) || nextYear);
+  };
+  syncPrompt();
+  yEl.oninput = syncPrompt;
+  bd.classList.remove('hidden');
+
+  const close = () => bd.classList.add('hidden');
+  document.getElementById('holidayClose').onclick = close;
+  document.getElementById('holidayCancel').onclick = close;
+
+  document.getElementById('holidayCopyPrompt').onclick = function() {
+    const btn = this;
+    const text = document.getElementById('holidayPrompt').value;
+    const done = () => { const o = btn.textContent; btn.textContent = '✅ 已复制'; setTimeout(() => { btn.textContent = o; }, 1500); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => _fallbackCopy(text, done));
+      else _fallbackCopy(text, done);
+    } catch (e) { _fallbackCopy(text, done); }
+  };
+
+  document.getElementById('holidayPreviewBtn').onclick = () => {
+    const year = parseInt(yEl.value, 10);
+    const box = document.getElementById('holidayResult');
+    const saveBtn = document.getElementById('holidaySave');
+    saveBtn.disabled = true;
+    _holidayPending = null;
+
+    if (!year || year < 2024 || year > 2060) {
+      box.innerHTML = '<div style="color:#A32D2D;font-size:13px;">年份填 2024~2060 之间的数字</div>';
+      return;
+    }
+    const parsed = parseHolidayPaste(document.getElementById('holidayPaste').value);
+    if (!parsed.items.length) {
+      box.innerHTML = '<div style="color:#A32D2D;font-size:13px;">没读出有效的假期。检查一下格式：<br>' +
+        '每行写成「假期名｜开始日期｜结束日期」，日期用 2029-01-01 这种写法。</div>';
+      return;
+    }
+    // 年份不一致提醒（AI 有时会给错年份）
+    const wrongYear = parsed.items.filter(it => it.start.slice(0, 4) !== String(year));
+    const built = buildHolidayEntries(parsed.items);
+
+    let html = '';
+    if (wrongYear.length) {
+      html += '<div style="background:#FAEEDA;border:1px solid #854F0B;color:#412402;border-radius:4px;padding:8px 10px;font-size:12px;margin-bottom:8px;">' +
+        '⚠️ 有 ' + wrongYear.length + ' 行的日期不是 ' + year + ' 年（' +
+        wrongYear.map(x => x.name + ' ' + x.start).join('、') + '），请确认年份填对了。</div>';
+    }
+    if (parsed.bad.length) {
+      html += '<div style="background:#FAEEDA;border:1px solid #854F0B;color:#412402;border-radius:4px;padding:8px 10px;font-size:12px;margin-bottom:8px;">' +
+        '⚠️ 有 ' + parsed.bad.length + ' 行没看懂，已跳过：' +
+        parsed.bad.slice(0, 3).map(escapeHtml).join(' / ') + (parsed.bad.length > 3 ? ' …' : '') + '</div>';
+    }
+
+    const totalWeeks = new Set();
+    built.entries.forEach(en => en.weeks.forEach(w => totalWeeks.add(w)));
+
+    html += '<div style="font-size:13px;margin-bottom:6px;">读到 <b>' + parsed.items.length +
+      '</b> 个假期，其中 <b>' + built.entries.length + '</b> 个会扣周，共扣 <b>' + totalWeeks.size + '</b> 周：</div>';
+    html += '<div style="border:1px solid var(--border);border-radius:6px;overflow:hidden;font-size:12px;">';
+    built.detail.forEach(function(d, i) {
+      const bg = i % 2 ? 'var(--bg-panel)' : 'transparent';
+      const weekTxt = d.hit.length
+        ? d.hit.map(x => '<b>W' + x.w + '</b>（' + x.days + '天）').join('　')
+        : '<span style="color:var(--text-muted);">不扣</span>';
+      const why = d.counted
+        ? ''
+        : '<span style="color:var(--text-muted);"> · ' +
+            d.miss.map(x => 'W' + x.w + '只占' + x.days + '天').join('、') + '，未超 3 天</span>';
+      html += '<div style="display:flex;gap:10px;padding:6px 10px;background:' + bg + ';align-items:baseline;">' +
+        '<span style="min-width:88px;">' + escapeHtml(d.name) + '</span>' +
+        '<span style="min-width:150px;color:var(--text-muted);">' + d.start + ' ~ ' + d.end + '</span>' +
+        '<span>' + weekTxt + why + '</span></div>';
+    });
+    html += '</div>';
+    html += '<div class="text-muted text-sm" style="margin-top:6px;">规则：某一周内放假天数超过 3 天，才扣掉整周。</div>';
+    box.innerHTML = html;
+
+    if (built.entries.length) {
+      _holidayPending = { year: year, entries: built.entries };
+      saveBtn.disabled = false;
+    } else {
+      box.innerHTML += '<div style="color:#A32D2D;font-size:12px;margin-top:6px;">没有任何一周需要扣除，无需保存。</div>';
+    }
+  };
+
+  document.getElementById('holidaySave').onclick = () => {
+    if (!_holidayPending) return;
+    saveUserHolidays(_holidayPending.year, _holidayPending.entries);
+    const y = _holidayPending.year;
+    _holidayPending = null;
+    close();
+    renderSettings(); bindSettingsEvents(); bindFlowsEvents();
+    toast(y + ' 年假期已保存，排期会自动跳过这些周', 'success');
+  };
+}
+
+// 删除某年用户补录的假期（设置页按钮调用）
+window._delHolidayYear = function(year) {
+  if (!confirm('删除 ' + year + ' 年自己录入的假期？\n\n删除后该年不再扣除任何周（除非系统自带该年数据）。')) return;
+  removeUserHolidays(year);
+  renderSettings(); bindSettingsEvents(); bindFlowsEvents();
+  toast(year + ' 年假期已删除', 'info');
+};
 
 // ============================================
 // 顶部按钮

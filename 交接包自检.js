@@ -26,8 +26,10 @@ function ok(label, cond, extra) {
 // ---------- 1. 结构完整性 ----------
 console.log('=== 1. 目录结构 ===');
 ['源码/index.html', '源码/xlsx-js-style.min.js', '源码/fflate.min.js',
+ '文档/排期工具_维护手册.xlsx', '文档/排期甘特图_示例.xlsx',
  '文档/维护速查.md', '文档/排期工具_维护手册.md', '文档/代码索引.md',
- '测试/verify_smartsheet.js', '工具/deploy.js', '交接说明.md'].forEach(function (f) {
+ '测试/verify_smartsheet.js', '测试/verify_holiday.js',
+ '工具/gen-code-index.js', '工具/deploy.js', '交接说明.md'].forEach(function (f) {
   ok('存在 ' + f, fs.existsSync(path.join(TMP, f)));
 });
 
@@ -42,6 +44,11 @@ ok('CATEGORY_TREE key 已是规范名「系统文学设定」',
   html.indexOf("'系统文学设定': 'lit-system'") >= 0);
 ok('不含已废弃的旧 key 定义',
   html.indexOf("'系统性设定': 'lit-system'") < 0);
+// v76：设置页可补录法定假期（mentor 无代码基础，必须能自己改）
+ok('含用户可补录假期 userHolidays', html.indexOf('userHolidays') >= 0);
+ok('含假期补录弹窗 holidayModal', html.indexOf('holidayModal') >= 0);
+ok('配置版本升级不会冲掉用户补录的假期',
+  html.indexOf('mergedCfg.userHolidays = DEFAULT_CONFIG') < 0);
 
 // ---------- 3. 语法校验（交接说明第四节的第①步）----------
 console.log('\n=== 3. 语法校验（按交接说明的命令）===');
@@ -96,6 +103,17 @@ ok('缺样例文件时不报错、优雅降级（' + (m3 ? m3[1] + ' 项' : '?')
   out3.slice(-300));
 fs.unlinkSync(path.join(TMP, '测试/_nosample.js'));
 
+// 假期功能的回归测试也要能在包内直接跑
+let out4 = '', code4 = 0;
+try {
+  out4 = execSync('node verify_holiday.js', {
+    cwd: path.join(TMP, '测试'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
+  });
+} catch (e) { out4 = (e.stdout || '') + (e.stderr || ''); code4 = e.status || 1; }
+const m4 = out4.match(/PASS (\d+) \/ FAIL (\d+)/);
+ok('假期测试在包内能直接跑（' + (m4 ? m4[1] + ' 项' : '?') + '）',
+  !!m4 && m4[2] === '0' && code4 === 0, out4.slice(-300));
+
 // ---------- 5. 索引生成器能跑 ----------
 console.log('\n=== 5. 代码索引生成器 ===');
 const gi = fs.readFileSync(path.join(TMP, '工具/gen-code-index.js'), 'utf8');
@@ -109,7 +127,7 @@ try {
 ok('在包的原始目录结构下能定位全部标识符',
   out2.indexOf('全部标识符都能定位') >= 0 && code2 === 0, out2.trim().slice(-300));
 
-// ---------- 6. 文档没有失效引用 ----------
+// ---------- 6. 文档质量 ----------
 console.log('\n=== 6. 文档质量 ===');
 const manual = fs.readFileSync(path.join(TMP, '文档/排期工具_维护手册.md'), 'utf8');
 const quick = fs.readFileSync(path.join(TMP, '文档/维护速查.md'), 'utf8');
@@ -117,12 +135,13 @@ const handover = fs.readFileSync(path.join(TMP, '交接说明.md'), 'utf8');
 
 ok('维护手册无 4 位数行号区间引用', !/[0-9]{4}[–-][0-9]{4}/.test(manual));
 ok('维护手册提到了智能表格', manual.indexOf('智能表格') >= 0);
-ok('维护手册提到了两条发布链路', manual.indexOf('两条链路') >= 0);
 ok('维护手册提到了 verify_smartsheet', manual.indexOf('verify_smartsheet') >= 0);
-ok('速查表提到了 _cfgVersion 规则', quick.indexOf('_cfgVersion') >= 0);
 ok('速查表有排查顺序表', quick.indexOf('排查顺序') >= 0);
-ok('交接说明版本号是 v75.2', handover.indexOf('v75.2') >= 0);
-ok('交接说明提到维护速查', handover.indexOf('维护速查') >= 0);
+
+// 交接说明是给无代码基础的人看的，主入口必须指向 Excel 手册
+ok('交接说明把 Excel 手册作为主入口', handover.indexOf('排期工具_维护手册.xlsx') >= 0);
+ok('交接说明说明了假期怎么更新', handover.indexOf('法定假期') >= 0);
+ok('交接说明说明了外网不再推送', handover.indexOf('不会再推送') >= 0);
 ok('交接说明未残留 v74 字样', handover.indexOf('v74') < 0);
 
 // 章节交叉引用有效性
@@ -130,6 +149,42 @@ const secNums = (manual.match(/^## (\d+)\./gm) || []).map(function (s) { return 
 const refs = Array.from(new Set((manual.match(/§(\d+)/g) || []).map(function (s) { return s.slice(1); })));
 const dangling = refs.filter(function (r) { return secNums.indexOf(r) < 0; });
 ok('维护手册章节交叉引用全部有效', dangling.length === 0, '悬空引用 §' + dangling.join(', §'));
+
+// ---------- 7. Excel 手册可读性（mentor 的主入口）----------
+console.log('\n=== 7. Excel 维护手册 ===');
+{
+  const vm2 = require('vm');
+  const xcode = fs.readFileSync(path.join(TMP, '源码/xlsx-js-style.min.js'), 'utf8');
+  const sbx = {
+    window: {}, console, Uint8Array, ArrayBuffer, Date, Math, JSON, String, Number,
+    Array, Object, RegExp, Error, TextDecoder, TextEncoder, parseInt, parseFloat, isNaN, Set, Map
+  };
+  sbx.self = sbx.window; sbx.globalThis = sbx;
+  vm2.createContext(sbx); vm2.runInContext(xcode, sbx);
+  const XLSX = sbx.XLSX || sbx.window.XLSX;
+
+  const wb = XLSX.read(new Uint8Array(fs.readFileSync(path.join(TMP, '文档/排期工具_维护手册.xlsx'))), { type: 'array' });
+  ok('Excel 能被正常打开', !!wb && wb.SheetNames.length > 0);
+  ['先读这个', '常见情况', '问AI模板', '出问题了', '包里有什么'].forEach(function (s) {
+    ok('有工作表「' + s + '」', wb.SheetNames.indexOf(s) >= 0, wb.SheetNames.join(' / '));
+  });
+
+  // 全表文本不应出现代码术语（mentor 无代码基础）
+  let allText = '';
+  wb.SheetNames.forEach(function (n) {
+    const ws = wb.Sheets[n];
+    XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })
+      .forEach(function (r) { allText += r.join(' ') + '\n'; });
+  });
+  const jargon = ['DEFAULT_ITEM_TIME', 'CATEGORY_TREE', 'parseSmartsheetTable',
+    'localStorage', 'aoa', 'innerHTML', 'const ', 'function '];
+  const found = jargon.filter(function (j) { return allText.indexOf(j) >= 0; });
+  ok('全表无代码术语', found.length === 0, '出现了：' + found.join(', '));
+
+  ok('提到了法定假期更新', allText.indexOf('假期') >= 0);
+  ok('提到了问 AI 的做法', allText.indexOf('AI') >= 0);
+  ok('提到了内网网址', allText.indexOf('ai-scheduling-board.pages.woa.com') >= 0);
+}
 
 console.log('\n================================');
 console.log('  PASS ' + pass + ' / FAIL ' + fail);

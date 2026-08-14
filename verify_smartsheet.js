@@ -1,14 +1,52 @@
 // v75 验证：智能表格解析链路端到端实测
+//
+// 用法（在源码所在目录，或交接包根目录）：
+//   node verify_smartsheet.js
+//
+// 自动寻找源码与依赖，兼容两种目录布局：
+//   ① 原项目：  ai-scheduling-board-v10.html + xlsx-js-style.min.js 同目录
+//   ② 交接包：  源码/index.html + 源码/xlsx-js-style.min.js
 const fs = require('fs');
+const path = require('path');
 const vm = require('vm');
 
-const xcode = fs.readFileSync('./xlsx-js-style.min.js', 'utf8');
+// ---- 定位源码与依赖（不写死路径，否则换个目录布局就跑不起来）----
+function locate(candidates, label) {
+  for (const c of candidates) {
+    const p = path.isAbsolute(c) ? c : path.join(__dirname, c);
+    if (fs.existsSync(p)) return p;
+  }
+  console.error('❌ 找不到' + label + '，试过这些位置：');
+  candidates.forEach(c => console.error('   ' + path.join(__dirname, c)));
+  console.error('\n请在「源码所在目录」或「交接包根目录」下运行本脚本。');
+  process.exit(1);
+}
+
+const HTML_PATH = locate([
+  'ai-scheduling-board-v10.html',      // 原项目
+  '源码/index.html',                    // 交接包
+  'index.html',                        // 直接放一起
+  '../ai-scheduling-board-v10.html',   // 脚本在 测试/ 子目录里
+  '../源码/index.html'
+], '源码 HTML');
+
+const XLSX_PATH = locate([
+  'xlsx-js-style.min.js',
+  '源码/xlsx-js-style.min.js',
+  '../xlsx-js-style.min.js',
+  '../源码/xlsx-js-style.min.js'
+], 'xlsx-js-style.min.js');
+
+console.log('源码：' + path.relative(__dirname, HTML_PATH));
+console.log('依赖：' + path.relative(__dirname, XLSX_PATH) + '\n');
+
+const xcode = fs.readFileSync(XLSX_PATH, 'utf8');
 const sbx = { window: {}, console, Uint8Array, ArrayBuffer, Date, Math, JSON, String, Number, Array, Object, RegExp, Error, TextDecoder, TextEncoder, parseInt, parseFloat, isNaN, Set, Map };
 sbx.self = sbx.window; sbx.globalThis = sbx;
 vm.createContext(sbx); vm.runInContext(xcode, sbx);
 const XLSX = sbx.XLSX || sbx.window.XLSX;
 
-const html = fs.readFileSync('./ai-scheduling-board-v10.html', 'utf8');
+const html = fs.readFileSync(HTML_PATH, 'utf8');
 const lines = html.split(/\r?\n/);
 
 // 按函数名抓取源码块。
@@ -99,14 +137,37 @@ function readXlsx(path) {
 }
 
 let pass = 0, fail = 0;
+let skipped = 0;
 function ok(label, cond, extra) {
   if (cond) { pass++; console.log('  PASS  ' + label); }
   else { fail++; console.log('  FAIL  ' + label + (extra !== undefined ? '  实际=' + JSON.stringify(extra) : '')); }
 }
 
+// 真实样例文件是可选的：它在我本机桌面上，交接给别人后不一定存在。
+// 找不到就跳过依赖它的两个用例，其余 80+ 项断言（构造数据）照常跑。
+const SAMPLE = (function () {
+  const cands = [
+    path.join(__dirname, '世界观需求录入表单.xlsx'),
+    path.join(__dirname, '样例', '世界观需求录入表单.xlsx'),
+    path.join(__dirname, '..', '世界观需求录入表单.xlsx'),
+    'C:/Users/ppxjpeng/Desktop/世界观需求录入表单.xlsx'
+  ];
+  for (const c of cands) if (fs.existsSync(c)) return c;
+  return null;
+})();
+
+if (!SAMPLE) {
+  console.log('ℹ️  未找到真实样例文件「世界观需求录入表单.xlsx」，将跳过用例 1 和 8。');
+  console.log('   其余用例用构造数据，覆盖同样的解析逻辑。');
+  console.log('   想跑完整测试：把一份智能表格导出的 xlsx 放到脚本同目录，命名为上述名字。\n');
+} else {
+  console.log('样例：' + SAMPLE + '\n');
+}
+
 // ================= 用例 1：真实文件 =================
+if (SAMPLE) {
 console.log('\n===== 用例1：真实智能表格文件 =====');
-const r = readXlsx("C:/Users/ppxjpeng/Desktop/世界观需求录入表单.xlsx");
+const r = readXlsx(SAMPLE);
 const tabText = A.tableToTabText(r.header, r.rows);
 const fmt = A.detectImportFormat(tabText);
 console.log('  格式探测 =', fmt);
@@ -150,6 +211,7 @@ const pipeIds = A.resolvePipelineIds(rec.pipelines || []);
 ok('管线映射 → [pv]', JSON.stringify(pipeIds) === '["pv"]', pipeIds);
 const assets = A.expandAssetTokens(rec.assetsArtItem || []);
 ok('产出展开 = [印象图]', JSON.stringify(assets) === '["印象图"]', assets);
+} else { skipped += 1; }
 
 // ================= 用例 2：多行 + 多选 + 特殊需求 =================
 console.log('\n===== 用例2：多行/多选/特殊需求/文学产出 =====');
@@ -281,9 +343,10 @@ ok('CATEGORY_TREE 纯文学类 key 已统一为 系统文学设定',
   Object.keys(A.CATEGORY_TREE['纯文学类']));
 
 // ================= 用例 8：真实 5 行文件（含径山书院）=================
+if (SAMPLE) {
 console.log('\n===== 用例8：真实多行文件端到端 =====');
 {
-  const rr = readXlsx("C:/Users/ppxjpeng/Desktop/世界观需求录入表单.xlsx");
+  const rr = readXlsx(SAMPLE);
   const tt = A.parseTextToTable(A.tableToTabText(rr.header, rr.rows)).table;
   const rs = A.parseSmartsheetTable(tt);
   console.log('  解析 ' + rs.length + ' 条：' + rs.map(x => x.name).join(' / '));
@@ -322,14 +385,20 @@ console.log('\n===== 用例8：真实多行文件端到端 =====');
   } else {
     ok('找到长安坍塌这条记录', false, rs.map(x => x.name));
   }
-  // isStrictPipelineName 单元级断言
-  ok('isStrict: 叙事设计 → false（是产出物）', A.isStrictPipelineName('叙事设计') === false);
-  ok('isStrict: 叙事 → true', A.isStrictPipelineName('叙事') === true);
-  ok('isStrict: 世界观Bible概念 → true（去前缀后精确）', A.isStrictPipelineName('世界观Bible概念') === true);
-  ok('isStrict: 角色设定 → false（是产出物）', A.isStrictPipelineName('角色设定') === false);
-  ok('isStrict: 物料应用 → false（是产出物）', A.isStrictPipelineName('物料应用') === false);
-  ok('isStrict: 局内 → false（不是任何管线名）', A.isStrictPipelineName('局内') === false);
 }
+} else { skipped += 1; }
+
+// ================= 用例 8b：isStrictPipelineName 单元断言 =================
+// 不依赖样例文件，独立跑。
+// 背景：「叙事设计」是产出物，但含子串「叙事」（管线名）。
+// 用 resolvePipelineId（模糊匹配）判列名会把它当管线列，该列产出全丢。
+console.log('\n===== 用例8b：严格管线名判定 =====');
+ok('isStrict: 叙事设计 → false（是产出物）', A.isStrictPipelineName('叙事设计') === false);
+ok('isStrict: 叙事 → true', A.isStrictPipelineName('叙事') === true);
+ok('isStrict: 世界观Bible概念 → true（去前缀后精确）', A.isStrictPipelineName('世界观Bible概念') === true);
+ok('isStrict: 角色设定 → false（是产出物）', A.isStrictPipelineName('角色设定') === false);
+ok('isStrict: 物料应用 → false（是产出物）', A.isStrictPipelineName('物料应用') === false);
+ok('isStrict: 局内 → false（不是任何管线名）', A.isStrictPipelineName('局内') === false);
 
 // ================= 用例 9：组名行错位/缺失也不能影响分类 =================
 // 真实踩坑：skill 的 handleMessage 会 text.trim()，把首行开头的空列吃掉
@@ -374,6 +443,11 @@ console.log('\n===== 用例9：组名行错位 / 缺失 / 全空 =====');
 }
 
 console.log('\n================================');
-console.log('  PASS ' + pass + ' / FAIL ' + fail);
+console.log('  PASS ' + pass + ' / FAIL ' + fail +
+  (skipped ? ' / 跳过 ' + skipped + ' 组（缺样例文件）' : ''));
 console.log('================================');
+if (skipped) {
+  console.log('提示：把一份智能表格导出的 xlsx 命名为「世界观需求录入表单.xlsx」');
+  console.log('      放到本脚本同目录，即可跑完整测试。');
+}
 process.exit(fail ? 1 : 0);

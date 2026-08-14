@@ -29,7 +29,7 @@ console.log('=== 1. 目录结构 ===');
  '文档/排期工具_维护手册.xlsx', '文档/排期甘特图_示例.xlsx',
  '文档/维护速查.md', '文档/排期工具_维护手册.md', '文档/代码索引.md',
  '测试/verify_smartsheet.js', '测试/verify_holiday.js',
- '工具/gen-code-index.js', '工具/deploy.js', '交接说明.md'].forEach(function (f) {
+ '工具/表单字段自检.js', '工具/gen-code-index.js', '工具/deploy.js', '交接说明.md'].forEach(function (f) {
   ok('存在 ' + f, fs.existsSync(path.join(TMP, f)));
 });
 
@@ -127,6 +127,18 @@ try {
 ok('在包的原始目录结构下能定位全部标识符',
   out2.indexOf('全部标识符都能定位') >= 0 && code2 === 0, out2.trim().slice(-300));
 
+// 表单字段自检也要能在包内直接跑（改了需求收集表时会用到）
+let out5 = '', code5 = 0;
+try {
+  out5 = execSync('node 表单字段自检.js', {
+    cwd: path.join(TMP, '工具'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
+  });
+} catch (e) { out5 = (e.stdout || '') + (e.stderr || ''); code5 = e.status || 1; }
+ok('表单字段自检在包内能直接跑（无参数时列出全部字段）',
+  code5 === 0 && out5.indexOf('系统能识别的所有字段') >= 0 &&
+  out5.indexOf('需求类型') >= 0 && out5.indexOf('应用与露出') >= 0,
+  out5.trim().slice(-300));
+
 // ---------- 6. 文档质量 ----------
 console.log('\n=== 6. 文档质量 ===');
 const manual = fs.readFileSync(path.join(TMP, '文档/排期工具_维护手册.md'), 'utf8');
@@ -165,7 +177,7 @@ console.log('\n=== 7. Excel 维护手册 ===');
 
   const wb = XLSX.read(new Uint8Array(fs.readFileSync(path.join(TMP, '文档/排期工具_维护手册.xlsx'))), { type: 'array' });
   ok('Excel 能被正常打开', !!wb && wb.SheetNames.length > 0);
-  ['先读这个', '常见情况', '问AI模板', '出问题了', '包里有什么'].forEach(function (s) {
+  ['先读这个', '常见情况', '问AI模板', '出问题了', '表单该有哪些列', '包里有什么'].forEach(function (s) {
     ok('有工作表「' + s + '」', wb.SheetNames.indexOf(s) >= 0, wb.SheetNames.join(' / '));
   });
 
@@ -184,6 +196,56 @@ console.log('\n=== 7. Excel 维护手册 ===');
   ok('提到了法定假期更新', allText.indexOf('假期') >= 0);
   ok('提到了问 AI 的做法', allText.indexOf('AI') >= 0);
   ok('提到了内网网址', allText.indexOf('ai-scheduling-board.pages.woa.com') >= 0);
+
+  // ★ 关键：「表单该有哪些列」这页必须和代码里的真实取值一致。
+  //   这页是给业务方定表格结构的依据，写错了会导致他们照着做出系统读不了的表。
+  //   所以直接从源码里抓出真值逐个核对，而不是靠人肉维护。
+  const src = html;
+  function jsonFromSrc(declName) {
+    const i = src.indexOf('const ' + declName + ' = {');
+    if (i < 0) return null;
+    let depth = 0, start = src.indexOf('{', i), end = -1;
+    for (let k = start; k < src.length; k++) {
+      if (src[k] === '{') depth++;
+      else if (src[k] === '}') { depth--; if (depth === 0) { end = k; break; } }
+    }
+    return end < 0 ? null : src.slice(start, end + 1);
+  }
+
+  // 三个大类的子分类规范名
+  const catSrc = jsonFromSrc('CATEGORY_TREE') || '';
+  const subNames = (catSrc.match(/'([^']+)':\s*'(scene|char|lit)-[a-z]+'/g) || [])
+    .map(function (s) { return s.match(/'([^']+)'/)[1]; });
+  const missingSub = subNames.filter(function (n) { return allText.indexOf(n) < 0; });
+  ok('表单页列全了所有子分类（' + subNames.length + ' 个）',
+    missingSub.length === 0, '漏了：' + missingSub.join('、'));
+
+  // 九条管线名
+  const pipeNames = (src.match(/\{ id: '[a-z]+', name: '([^']+)', score:/g) || [])
+    .map(function (s) { return s.match(/name: '([^']+)'/)[1]; });
+  const missingPipe = pipeNames.filter(function (n) { return allText.indexOf(n) < 0; });
+  ok('表单页列全了所有管线（' + pipeNames.length + ' 条）',
+    pipeNames.length >= 9 && missingPipe.length === 0, '漏了：' + missingPipe.join('、'));
+
+  // 产出物二级分类 + 每个具体项
+  const asSrc = jsonFromSrc('ASSETS_TREE') || '';
+  const mids = (asSrc.match(/'([^']+)':\s*\[/g) || []).map(function (s) { return s.match(/'([^']+)'/)[1]; });
+  const missingMid = mids.filter(function (n) { return allText.indexOf(n) < 0; });
+  ok('表单页列全了所有产出物分类（' + mids.length + ' 个）',
+    missingMid.length === 0, '漏了：' + missingMid.join('、'));
+
+  const items = [];
+  (asSrc.match(/\[[^\]]*\]/g) || []).forEach(function (arr) {
+    (arr.match(/'([^']+)'/g) || []).forEach(function (s) { items.push(s.slice(1, -1)); });
+  });
+  const missingItem = Array.from(new Set(items)).filter(function (n) { return allText.indexOf(n) < 0; });
+  ok('表单页列全了所有可填产出项（' + new Set(items).size + ' 项）',
+    missingItem.length === 0, '漏了：' + missingItem.join('、'));
+
+  // 基础字段的规范列名
+  ['需求名', 'DDL', '提需人', '需求描述'].forEach(function (n) {
+    ok('表单页提到基础字段「' + n + '」', allText.indexOf(n) >= 0);
+  });
 }
 
 console.log('\n================================');

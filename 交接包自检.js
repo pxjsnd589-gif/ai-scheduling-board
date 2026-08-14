@@ -30,9 +30,23 @@ console.log('=== 1. 目录结构 ===');
  '文档/维护速查.md', '文档/排期工具_维护手册.md', '文档/代码索引.md',
  '测试/verify_smartsheet.js', '测试/verify_holiday.js',
  '工具/表单字段自检.js', '工具/gen-code-index.js', '工具/skill同步核对.js',
- '工具/deploy.js', '交接说明.md'].forEach(function (f) {
+ '工具/deploy.js', '交接说明.md',
+ // AI 助手版整份带进包 —— 原来写「想要的话找我拿」，人走了这句就失效
+ 'AI助手版/SKILL.md', 'AI助手版/cli.js', 'AI助手版/index.js',
+ 'AI助手版/parse_import.js', 'AI助手版/bot-dialog.js', 'AI助手版/run_skill.js',
+ 'AI助手版/export-gantt.js', 'AI助手版/read_xlsx.js', 'AI助手版/selftest.js',
+ 'AI助手版/package.json', 'AI助手版/怎么用.md'].forEach(function (f) {
   ok('存在 ' + f, fs.existsSync(path.join(TMP, f)));
 });
+
+// AI 助手版不能带隐私/垃圾文件
+console.log('\n=== 1b. AI 助手版干净度 ===');
+ok('不含 .sessions（对话记录有隐私）', !fs.existsSync(path.join(TMP, 'AI助手版/.sessions')));
+{
+  const od = path.join(TMP, 'AI助手版/output');
+  const leftover = fs.existsSync(od) ? fs.readdirSync(od) : [];
+  ok('不含 output 里跑出来的甘特图', leftover.length === 0, leftover.join(', '));
+}
 
 // ---------- 2. 源码是最新版（含智能表格 + 别名表 + 严格管线判定）----------
 console.log('\n=== 2. 源码版本 ===');
@@ -151,6 +165,41 @@ try {
 ok('skill 同步核对在包内能跑（有 skill 则核对，没装则优雅跳过）',
   code6 === 0 && (out6.indexOf('skill 与网页版一致') >= 0 || out6.indexOf('跳过核对') >= 0),
   out6.trim().slice(-400));
+
+// ★ AI 助手版必须能在包里直接跑起来 —— 接手人是从包里复制走的，
+//   如果只有在我机器上能跑，那等于没给他。
+console.log('\n=== 5b. AI 助手版能在包内直接跑 ===');
+{
+  const sd = path.join(TMP, 'AI助手版');
+  function run(cmd) {
+    try { return { out: execSync(cmd, { cwd: sd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }), code: 0 }; }
+    catch (e) { return { out: (e.stdout || '') + (e.stderr || ''), code: e.status || 1 }; }
+  }
+  const r1 = run('node -e "require(\'./index\'); console.log(\'REQUIRE_OK\')"');
+  ok('引擎能被 require（零依赖，不用 npm install）',
+    r1.code === 0 && r1.out.indexOf('REQUIRE_OK') >= 0, r1.out.trim().slice(-300));
+
+  const r2 = run('node cli.js --fields');
+  ok('cli.js --fields 能列出字段清单',
+    r2.code === 0 && r2.out.indexOf('需求类型') >= 0 && r2.out.indexOf('应用与露出') >= 0,
+    r2.out.trim().slice(-300));
+
+  const r3 = run('node selftest.js');
+  const m5 = r3.out.match(/PASS=(\d+)\s+FAIL=(\d+)/);
+  ok('自检在包内全 PASS（' + (m5 ? m5[1] + ' 项' : '?') + '）',
+    !!m5 && m5[2] === '0' && r3.code === 0, r3.out.trim().slice(-400));
+
+  // skill 与网页版必须是同一版本（包里两份要一致，否则接手人两边行为不同）
+  const sHtml = fs.readFileSync(path.join(TMP, '源码/index.html'), 'utf8');
+  const sIdx = fs.readFileSync(path.join(sd, 'index.js'), 'utf8');
+  const sPi = fs.readFileSync(path.join(sd, 'parse_import.js'), 'utf8');
+  ok('AI 助手版含假期补录（与网页版同版本）', sIdx.indexOf('userHolidays') >= 0);
+  ok('AI 助手版含智能表格解析', sPi.indexOf('parseSmartsheetTable') >= 0);
+  ok('AI 助手版含子分类别名表', sPi.indexOf('CATEGORY_SUB_ALIASES') >= 0);
+  ok('AI 助手版用规范名「系统文学设定」',
+    sPi.indexOf("'系统文学设定': 'lit-system'") >= 0 || sIdx.indexOf("'系统文学设定': 'lit-system'") >= 0);
+  ok('网页版也是同一规范名', sHtml.indexOf("'系统文学设定': 'lit-system'") >= 0);
+}
 
 // ---------- 6. 文档质量 ----------
 console.log('\n=== 6. 文档质量 ===');
